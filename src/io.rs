@@ -86,8 +86,11 @@ impl Parameters {
                     arg_struct.count_array_file = args.next().expect("Error parsing count location!");
                     arg_struct.counts = Some(read_counts(&arg_struct.count_array_file))
                 },
-                "-std" => {
+                "-stdin" => {
                     arg_struct.counts = Some(read_standard_in());
+                }
+                "-stdout" => {
+                    arg_struct.report_address = None;
                 }
                 "-p" | "-processors" | "-threads" => {
                     arg_struct.processor_limit = Some(args.next().expect("Error processing processor limit").parse::<usize>().expect("Error parsing processor limit"));
@@ -324,18 +327,6 @@ fn read_standard_in() -> Array<f64,Ix2> {
 
         for (j,gene) in line.as_ref().expect("readline error").split_whitespace().enumerate() {
 
-            if j == 0 && i%200==0{
-                print!("\n");
-            }
-
-            if i%200==0 && j%200 == 0 {
-                print!("{} ", gene.parse::<f64>().unwrap_or(-1.) );
-            }
-
-            // if !((gene.0 == 1686) || (gene.0 == 4660)) {
-            //     continue
-            // }
-
             match gene.parse::<f64>() {
                 Ok(exp_val) => {
 
@@ -357,16 +348,12 @@ fn read_standard_in() -> Array<f64,Ix2> {
         counts.append(&mut gene_vector);
 
         if i % 100 == 0 {
-            println!("{}", i);
         }
 
 
     };
 
     let array = Array::from_shape_vec((samples,counts.len()/samples),counts).unwrap_or(Array::zeros((0,0)));
-
-    println!("===========");
-    println!("{},{}", array.shape()[0], array.shape()[1]);
 
     array
 
