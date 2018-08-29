@@ -11,7 +11,7 @@ use std::fmt::Debug;
 
 
 
-use ndarray::{Array,Ix1,Ix2,Axis,Zip,ArrayView};
+use ndarray::{Array,Ix1,Ix2};
 
 #[derive(Debug,Clone)]
 pub struct Parameters {
@@ -21,10 +21,14 @@ pub struct Parameters {
     pub feature_names: Option<Vec<String>>,
     pub sample_names: Option<Vec<String>>,
     pub report_address: Option<String>,
+    pub dump_error: Option<String>,
 
     pub feature_subsample: Option<usize>,
     pub sample_subsample: Option<usize>,
     pub scaling_factor: Option<f64>,
+    pub merge_distance: Option<f64>,
+    pub convergence_factor: Option<f64>,
+    pub locality: Option<f64>,
 
     count_array_file: String,
     feature_header_file: Option<String>,
@@ -47,11 +51,15 @@ impl Parameters {
             sample_header_file: None,
             sample_names: None,
             report_address: None,
+            dump_error: None,
 
             processor_limit: None,
 
             feature_subsample: None,
             sample_subsample: None,
+            merge_distance: None,
+            convergence_factor: None,
+            locality: None,
 
             scaling_factor: None,
 
@@ -63,11 +71,11 @@ impl Parameters {
 
         let mut arg_struct = Parameters::empty();
 
-        let raw_command = args.next();
+        let _raw_command = args.next();
 
         arg_struct.command = Command::parse(&args.next().expect("Please enter a command"));
 
-        let mut supress_warnings = false;
+        let mut _supress_warnings = false;
 
         while let Some((i,arg)) = args.enumerate().next() {
 
@@ -76,7 +84,7 @@ impl Parameters {
                     if i!=1 {
                         println!("If the supress warnings flag is not given first it may not function correctly.");
                     }
-                    supress_warnings = true;
+                _supress_warnings = true;
                 },
                 "-auto" | "-a"=> {
                     arg_struct.auto = true;
@@ -114,6 +122,18 @@ impl Parameters {
                 },
                 "-scaling" | "-step" | "-sf" | "-scaling_factor" => {
                     arg_struct.scaling_factor = Some(args.next().map(|x| x.parse::<f64>()).expect("Scaling factor parse error. Not a number?").expect("Iteration error"));
+                },
+                "-m" | "-merge" | "-merge_distance" => {
+                    arg_struct.merge_distance = Some(args.next().map(|x| x.parse::<f64>()).expect("Merge distance parse error. Not a number?").expect("Iteration error"));
+                },
+                "-error" => {
+                    arg_struct.dump_error = Some(args.next().expect("Error processing error destination"))
+                },
+                "-convergence" => {
+                    arg_struct.convergence_factor = Some(args.next().map(|x| x.parse::<f64>()).expect("Convergence distance parse error. Not a number?").expect("Iteration error"))
+                },
+                "-l" | "-locality" => {
+                    arg_struct.convergence_factor = Some(args.next().map(|x| x.parse::<f64>()).expect("Locality parse error. Not a number?").expect("Iteration error"))
                 }
 
                 &_ => {
@@ -138,7 +158,7 @@ impl Parameters {
 
         let mut output_features = ((features as f64 / (features as f64).log10()) as usize).min(features);
 
-        let mut input_features: usize;
+        let input_features: usize;
 
         if features < 3 {
             input_features = features;
@@ -170,10 +190,6 @@ impl Parameters {
             sample_subsample = samples/4;
         }
 
-        let leaf_size_cutoff = ((sample_subsample as f64).sqrt() as usize);
-
-        let trees = 100;
-
         let processors = num_cpus::get();
 
 
@@ -183,8 +199,6 @@ impl Parameters {
         println!("{:?}",input_features);
         println!("{:?}",output_features);
         println!("{:?}",processors);
-        println!("{:?}",trees,);
-        println!("{:?}",leaf_size_cutoff);
 
         self.auto = true;
 
@@ -320,12 +334,12 @@ fn read_standard_in() -> Array<f64,Ix2> {
     let mut counts: Vec<f64> = Vec::new();
     let mut samples = 0;
 
-    for (i,line) in count_array_pipe_guard.lines().enumerate() {
+    for (_i,line) in count_array_pipe_guard.lines().enumerate() {
 
         samples += 1;
         let mut gene_vector = Vec::new();
 
-        for (j,gene) in line.as_ref().expect("readline error").split_whitespace().enumerate() {
+        for (_j,gene) in line.as_ref().expect("readline error").split_whitespace().enumerate() {
 
             match gene.parse::<f64>() {
                 Ok(exp_val) => {
@@ -389,7 +403,7 @@ impl Command {
 }
 
 
-pub fn write_array<T: Debug>(input: Array<T,Ix2>,target:Option<String>) -> Result<(),Error> {
+pub fn write_array<T: Debug>(input: Array<T,Ix2>,target:&Option<String>) -> Result<(),Error> {
     let formatted =
         input
         .outer_iter()
@@ -412,13 +426,13 @@ pub fn write_array<T: Debug>(input: Array<T,Ix2>,target:Option<String>) -> Resul
             let mut stdout = io::stdout();
             let mut stdout_handle = stdout.lock();
             stdout_handle.write(&formatted.as_bytes())?;
-            stdout_handle.write(b"\n");
+            stdout_handle.write(b"\n")?;
             Ok(())
         }
     }
 }
 
-pub fn write_vector<T: Debug>(input: Array<T,Ix1>,target: Option<String>) -> Result<(),Error> {
+pub fn write_vector<T: Debug>(input: Array<T,Ix1>,target: &Option<String>) -> Result<(),Error> {
     let formatted =
         input
         .iter()
@@ -437,7 +451,7 @@ pub fn write_vector<T: Debug>(input: Array<T,Ix1>,target: Option<String>) -> Res
             let mut stdout = io::stdout();
             let mut stdout_handle = stdout.lock();
             stdout_handle.write(&formatted.as_bytes())?;
-            stdout_handle.write(b"\n");
+            stdout_handle.write(b"\n")?;
             Ok(())
         }
     }
