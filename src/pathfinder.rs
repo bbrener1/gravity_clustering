@@ -104,7 +104,7 @@ impl Pathfinder {
                         *sp -= p;
                     };
                 });
-            let sq_len_acc = sub_point.fold(0.0,|acc,x| acc + x.powf(locality));
+            let sq_len_acc = sub_point.iter().zip(self.feature_subsamples.iter()).fold(0.0,|acc,(x,fs)| if *fs {acc + x.powf(locality)} else {acc});
             if sq_len_acc == 0. {
                 sub_point.fill(0.);
             }
