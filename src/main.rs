@@ -51,7 +51,7 @@ fn main() -> Result<(),Error> {
             field.predict();
 
             let mut refining_parameters = Arc::make_mut(&mut parameters).clone();
-            refining_parameters.scaling_factor = Some(parameters.scaling_factor.unwrap_or(0.1) / 2.);
+            // refining_parameters.scaling_factor = Some(parameters.scaling_factor.unwrap_or(0.1) / 2.);
             // refining_parameters.locality = Some(parameters.locality.unwrap_or(3.) / 2.);
             // refining_parameters.sample_subsample = Some(field.gravity_points.shape()[0]/10);
 
