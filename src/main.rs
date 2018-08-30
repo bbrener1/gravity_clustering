@@ -7,6 +7,7 @@ extern crate num_cpus;
 #[macro_use]
 extern crate ndarray;
 extern crate ndarray_parallel;
+extern crate rayon;
 
 mod pathfinder;
 mod io;
@@ -15,6 +16,7 @@ use io::{write_array,write_vector};
 use gravity_field::GravityField;
 use io::{Parameters,Command};
 use ndarray::{Array,Axis,Ix1};
+use std::sync::Arc;
 
 use std::io::Error;
 
@@ -27,9 +29,13 @@ fn main() -> Result<(),Error> {
 
     let mut arg_iter = env::args();
 
-    let mut parameters = Parameters::read(&mut arg_iter);
+    let mut parameters_raw = Parameters::read(&mut arg_iter);
 
-    let mut field = GravityField::init(parameters.counts.take().unwrap(), &parameters);
+    let gravity_points = parameters_raw.counts.take().unwrap();
+
+    let mut parameters = Arc::new(parameters_raw);
+
+    let mut field = GravityField::init(gravity_points, parameters.clone());
 
     match parameters.command {
         Command::Fit => {
@@ -44,12 +50,12 @@ fn main() -> Result<(),Error> {
             field.fit();
             field.predict();
 
-            let mut refining_parameters = parameters.clone();
+            let mut refining_parameters = Arc::make_mut(&mut parameters).clone();
             refining_parameters.scaling_factor = Some(parameters.scaling_factor.unwrap_or(0.1) / 2.);
             // refining_parameters.locality = Some(parameters.locality.unwrap_or(3.) / 2.);
             // refining_parameters.sample_subsample = Some(field.gravity_points.shape()[0]/10);
 
-            let mut refining_field = GravityField::init(field.final_positions.unwrap(),&refining_parameters);
+            let mut refining_field = GravityField::init(field.final_positions.unwrap(),Arc::new(refining_parameters));
 
             refining_field.fit();
             let predictions = refining_field.predict();

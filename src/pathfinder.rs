@@ -1,6 +1,5 @@
-use ndarray::{Array,Ix1,Ix2,Axis,ArrayView,Zip};
+use ndarray::{Array,Ix1,Ix2,Axis,Zip};
 use std::collections::VecDeque;
-use std::collections::HashSet;
 use std::sync::Arc;
 use rand::{Rng,ThreadRng,thread_rng};
 use std::cmp::{min,max};
@@ -10,9 +9,9 @@ use ndarray_parallel::prelude::*;
 
 
 #[derive(Debug)]
-pub struct Pathfinder<'a> {
+pub struct Pathfinder {
     point: Array<f64,Ix1>,
-    origin: ArrayView<'a,f64,Ix1>,
+    origin: Array<f64,Ix1>,
     skip: usize,
     samples: usize,
     features: usize,
@@ -22,12 +21,12 @@ pub struct Pathfinder<'a> {
     feature_subsamples: Array<bool,Ix1>,
     previous_steps: VecDeque<Array<f64,Ix1>>,
     rng: ThreadRng,
-    parameters: &'a Parameters,
+    parameters: Arc<Parameters>,
 }
 
-impl<'a> Pathfinder<'a> {
+impl Pathfinder {
     // pub fn init(origin: ArrayView<'a,f64,Ix1>, gravity_points: Arc<Array<f64,Ix2>>, skip: usize, scaling_factor:Option<f64>, subsample_arg: Option<usize>, convergence_arg: Option<f64>,locality: Option<f64>) -> Pathfinder {
-    pub fn init(origin: ArrayView<'a,f64,Ix1>, gravity_points: Arc<Array<f64,Ix2>>, skip: usize, parameters: &'a Parameters) -> Pathfinder<'a> {
+    pub fn init(origin: Array<f64,Ix1>, gravity_points: Arc<Array<f64,Ix2>>, skip: usize, parameters: Arc<Parameters>) -> Pathfinder {
 
         let point = origin.to_owned();
 
@@ -100,7 +99,7 @@ impl<'a> Pathfinder<'a> {
             let locality = self.parameters.locality.unwrap_or(4.);
             // sub_point.zip_mut_with(&self.point, |s,c| {*s -= c; sq_len_acc += s.powf(locality).abs();});
             Zip::from(&mut sub_point).and(self.point.view()).and(self.feature_subsamples.view())
-                .par_apply(|sp,p,fs| {
+                .apply(|sp,p,fs| {
                     if *fs {
                         *sp -= p;
                     };
@@ -187,7 +186,7 @@ mod pathfinder_tesing {
         Array::from_vec(vec![7.,8.])
     }
 
-    fn basic_gravity<'a>(point: ArrayView<'a,f64,Ix1>,parameters: &'a Parameters) -> Pathfinder<'a> {
+    fn basic_gravity(point: Array<f64,Ix1>,parameters: Arc<Parameters>) -> Pathfinder {
         let gravity_points = Arc::new(Array::from_shape_vec((5,2),vec![10.,8.,9.,10.,3.,4.,3.,3.,5.,6.]).expect("wtf?"));
         Pathfinder::init(point, gravity_points, 6, parameters)
     }
@@ -196,7 +195,7 @@ mod pathfinder_tesing {
     fn step_test() {
         let parameters = Parameters::empty();
         let point = basic_point();
-        let mut path = basic_gravity(point.view(),&parameters);
+        let mut path = basic_gravity(point,Arc::new(parameters));
         for i in 0..1000 {
             println!("{:?}",path.step());
             println!("{:?}",path.point);
@@ -207,7 +206,7 @@ mod pathfinder_tesing {
     fn descent_test() {
         let parameters = Parameters::empty();
         let point = basic_point();
-        let mut path = basic_gravity(point.view(),&parameters);
+        let mut path = basic_gravity(point,Arc::new(parameters));
         let end = path.descend();
 
         let hopefully_end = array![5.,6.];

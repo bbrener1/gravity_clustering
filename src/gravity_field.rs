@@ -1,22 +1,23 @@
 use std::sync::Arc;
-use ndarray::{Array,Ix1,Ix2,Zip,ArrayView};
+use ndarray::{Array,Ix1,Ix2,Zip,Axis,ArrayView,stack};
 use std::f64;
+use rayon::prelude::*;
 
 use io::Parameters;
 
 use pathfinder::Pathfinder;
 
 
-pub struct GravityField<'a> {
+pub struct GravityField {
     pub gravity_points: Arc<Array<f64,Ix2>>,
     pub final_positions: Option<Array<f64,Ix2>>,
     pub clusters: Vec<(Array<f64,Ix1>,usize)>,
-    parameters: &'a Parameters,
+    parameters: Arc<Parameters>,
 }
 
-impl<'a> GravityField<'a> {
+impl GravityField {
 
-    pub fn init(gravity_points: Array<f64,Ix2>, parameters:&'a Parameters) -> GravityField {
+    pub fn init(gravity_points: Array<f64,Ix2>, parameters:Arc<Parameters>) -> GravityField {
         assert!(!gravity_points.iter().any(|x| x.is_nan()));
         GravityField {
             gravity_points: Arc::new(gravity_points),
@@ -31,11 +32,22 @@ impl<'a> GravityField<'a> {
 
         let mut final_positions: Array<f64,Ix2> = Array::zeros((self.gravity_points.shape()[0],self.gravity_points.shape()[1]));
 
-        for (i,(point, mut store_final)) in self.gravity_points.outer_iter().zip(final_positions.outer_iter_mut()).enumerate() {
-            let mut pathfinder = Pathfinder::init(point, self.gravity_points.clone(), i, self.parameters);
-            eprintln!("Fitting sample {}", i);
-            store_final.assign(&pathfinder.descend());
+        let solutions: Vec<Array<f64,Ix1>> = (0..self.gravity_points.shape()[0]).into_par_iter()
+            .map(|pi| {
+                let mut pathfinder = Pathfinder::init(self.gravity_points.row(pi).to_owned(),self.gravity_points.clone(),pi,self.parameters.clone());
+                pathfinder.descend()
+            }
+        ).collect();
+
+        for (solution, mut final_store) in solutions.iter().zip(final_positions.outer_iter_mut()) {
+            final_store.assign(solution);
         }
+
+        // for (i,(point, mut store_final)) in self.gravity_points.outer_iter().zip(final_positions.outer_iter_mut()).enumerate() {
+        //     let mut pathfinder = Pathfinder::init(point, self.gravity_points.clone(), i, self.parameters);
+        //     eprintln!("Fitting sample {}", i);
+        //     store_final.assign(&pathfinder.descend());
+        // }
 
         self.final_positions = Some(final_positions);
 
@@ -115,7 +127,7 @@ mod gravity_testing {
     pub fn initization() {
         let parameters = Parameters::empty();
         let raw = basic_field();
-        GravityField::init(raw, &parameters);
+        GravityField::init(raw, Arc::new(parameters));
     }
 
     #[test]
@@ -124,14 +136,14 @@ mod gravity_testing {
         let parameters = Parameters::empty();
         let mut raw = basic_field();
         raw[[1,2]] = f64::NAN;
-        GravityField::init(raw, &parameters);
+        GravityField::init(raw, Arc::new(parameters));
     }
 
     #[test]
     pub fn fit() {
         let parameters = Parameters::empty();
         let raw = basic_field();
-        let mut field = GravityField::init(raw, &parameters);
+        let mut field = GravityField::init(raw, Arc::new(parameters));
         field.fit();
     }
 
@@ -139,7 +151,7 @@ mod gravity_testing {
     pub fn predict() {
         let parameters = Parameters::empty();
         let raw = basic_field();
-        let mut field = GravityField::init(raw, &parameters);
+        let mut field = GravityField::init(raw, Arc::new(parameters));
         field.fit();
         field.predict();
     }
