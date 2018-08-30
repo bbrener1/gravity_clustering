@@ -34,6 +34,7 @@ impl GravityField {
 
         let solutions: Vec<Array<f64,Ix1>> = (0..self.gravity_points.shape()[0]).into_par_iter()
             .map(|pi| {
+                eprintln!("Fitting sample {}",pi);
                 let mut pathfinder = Pathfinder::init(self.gravity_points.row(pi).to_owned(),self.gravity_points.clone(),pi,self.parameters.clone());
                 pathfinder.descend()
             }
