@@ -96,20 +96,25 @@ impl Pathfinder {
 
             // let mut sub_point = self.sub_gravity_points.row_mut(row_index);
             // println!("{:?}",sub_point);
+            let mut p_len_acc = 0.;
             let locality = self.parameters.locality.unwrap_or(4.);
             // sub_point.zip_mut_with(&self.point, |s,c| {*s -= c; sq_len_acc += s.powf(locality).abs();});
             Zip::from(&mut sub_point).and(self.point.view()).and(self.feature_subsamples.view())
                 .apply(|sp,p,fs| {
                     if *fs {
                         *sp -= p;
-                    };
+                        p_len_acc += sp.powf(locality).abs();
+                    }
+                    else {
+                        *sp = 0.;
+                    }
                 });
-            let sq_len_acc = sub_point.iter().zip(self.feature_subsamples.iter()).fold(0.0,|acc,(x,fs)| if *fs {acc + x.powf(locality).abs()} else {acc});
-            if sq_len_acc == 0. {
+            // let sq_len_acc = sub_point.iter().zip(self.feature_subsamples.iter()).fold(0.0,|acc,(x,fs)| if *fs {acc + x.powf(locality).abs()} else {acc});
+            if p_len_acc == 0. {
                 sub_point.fill(0.);
             }
             else {
-                sub_point.mapv_inplace(|x| x/sq_len_acc);
+                sub_point.mapv_inplace(|x| x/p_len_acc);
             }
             // println!("{:?}",sub_point);
         }
@@ -122,7 +127,7 @@ impl Pathfinder {
 
         let scaling_factor = self.parameters.scaling_factor.unwrap_or(0.1);
 
-        Zip::from(&mut self.point).and(sum.view()).and(self.feature_subsamples.view())
+        Zip::from(&mut self.point).and(&sum).and(self.feature_subsamples.view())
             .apply(|pf,sf,fs| {
                 if *fs {
                     *pf += sf / (sum_length / scaling_factor);
