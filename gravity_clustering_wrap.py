@@ -36,6 +36,8 @@ def fit_predict(targets,feature_sub=None,sample_sub=None,scaling=None,merge_dist
     arg_list.extend(["-stdout"])
     if sample_sub is not None:
         arg_list.extend(["-ss",str(sample_sub)])
+    if feature_sub is not None:
+        arg_list.extend(["-fs",str(feature_sub)])
     if scaling is not None:
         arg_list.extend(["-sf",str(scaling)])
     if merge_distance is not None:

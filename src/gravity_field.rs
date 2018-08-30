@@ -8,7 +8,7 @@ use pathfinder::Pathfinder;
 
 
 pub struct GravityField<'a> {
-    gravity_points: Arc<Array<f64,Ix2>>,
+    pub gravity_points: Arc<Array<f64,Ix2>>,
     pub final_positions: Option<Array<f64,Ix2>>,
     pub clusters: Vec<(Array<f64,Ix1>,usize)>,
     parameters: &'a Parameters,

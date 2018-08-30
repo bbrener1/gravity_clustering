@@ -363,8 +363,8 @@ fn read_standard_in() -> Array<f64,Ix2> {
 
     };
 
-    eprintln!("Counts read:");
-    eprintln!("{:?}", counts);
+    // eprintln!("Counts read:");
+    // eprintln!("{:?}", counts);
 
     let array = Array::from_shape_vec((samples,counts.len()/samples),counts).unwrap_or(Array::zeros((0,0)));
 
