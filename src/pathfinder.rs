@@ -95,7 +95,6 @@ impl Pathfinder {
         for mut sub_point in self.sub_gravity_points.outer_iter_mut() {
 
             // let mut sub_point = self.sub_gravity_points.row_mut(row_index);
-            // println!("{:?}",sub_point);
             let mut p_len_acc = 0.;
             let locality = self.parameters.locality.unwrap_or(4.);
             // sub_point.zip_mut_with(&self.point, |s,c| {*s -= c; sq_len_acc += s.powf(locality).abs();});
@@ -152,7 +151,7 @@ impl Pathfinder {
         let mut step_count = 50;
         loop {
             // let step = self.step();
-            // println!("Step:{:?}",step);
+            eprintln!("Step:{:?}",step_count);
             self.step();
             self.previous_steps.push_front(self.point.to_owned());
             self.previous_steps.pop_back();
