@@ -29,6 +29,7 @@ pub struct Parameters {
     pub merge_distance: Option<f64>,
     pub convergence_factor: Option<f64>,
     pub locality: Option<f64>,
+    pub refining: bool,
 
     count_array_file: String,
     feature_header_file: Option<String>,
@@ -60,6 +61,7 @@ impl Parameters {
             merge_distance: None,
             convergence_factor: None,
             locality: None,
+            refining: false,
 
             scaling_factor: None,
 
@@ -134,8 +136,10 @@ impl Parameters {
                 },
                 "-l" | "-locality" => {
                     arg_struct.convergence_factor = Some(args.next().map(|x| x.parse::<f64>()).expect("Locality parse error. Not a number?").expect("Iteration error"))
+                },
+                "-r" | "-refining" => {
+                    arg_struct.refining = true;
                 }
-
                 &_ => {
                     panic!("Not a valid argument: {}", arg);
                 }
