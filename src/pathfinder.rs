@@ -151,7 +151,9 @@ impl Pathfinder {
         let mut step_count = 50;
         loop {
             // let step = self.step();
-            eprintln!("Step:{:?}",step_count);
+            if step_count % 100 == 0 {
+                eprintln!("Step:{:?}",step_count);
+            }
             self.step();
             self.previous_steps.push_front(self.point.to_owned());
             self.previous_steps.pop_back();
