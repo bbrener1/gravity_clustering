@@ -102,13 +102,14 @@ impl Pathfinder {
                 .apply(|sp,p,fs| {
                     if *fs {
                         *sp -= p;
-                        p_len_acc += sp.powf(locality).abs();
+                        p_len_acc += sp.powi(2).abs();
                     }
                     else {
                         *sp = 0.;
                     }
                 });
             // let sq_len_acc = sub_point.iter().zip(self.feature_subsamples.iter()).fold(0.0,|acc,(x,fs)| if *fs {acc + x.powf(locality).abs()} else {acc});
+            p_len_acc = p_len_acc.powf((locality-1.).min(0.));
             if p_len_acc == 0. {
                 sub_point.fill(0.);
             }
