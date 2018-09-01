@@ -102,7 +102,7 @@ impl Pathfinder {
                 .apply(|sp,p,fs| {
                     if *fs {
                         *sp -= p;
-                        p_len_acc += sp.powi(2).abs();
+                        p_len_acc += sp.powi(2);
                     }
                     else {
                         *sp = 0.;
