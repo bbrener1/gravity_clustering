@@ -169,8 +169,8 @@ impl GravityField {
                     self.clusters.push(new_cluster);
                 }
 
-                // eprintln!("Unclustered:{:?}",available_points.len());
-                // eprintln!("Clusters:{:?}",self.clusters.len());
+                eprintln!("Unclustered:{:?}",available_points.len());
+                eprintln!("Clusters:{:?}",self.clusters.len());
 
             }
 

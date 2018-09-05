@@ -94,17 +94,22 @@ impl Pathfinder {
     // fn step(&mut self) {
         self.subsample();
         for mut sub_point in self.sub_gravity_points.outer_iter_mut() {
-
+            // eprintln!("S1:{:?}",sub_point);
             sub_point.scaled_add(-1.,&self.point);
+            // eprintln!("S2:{:?}",sub_point);
             let distance = length(sub_point.view());
             if distance == 0. {
                 sub_point.fill(0.);
             }
             else {
+                // eprintln!("D:{:?}",distance);
+                // eprintln!("D:{:?}",distance.powf(self.parameters.locality.unwrap_or(3.)));
                 sub_point /= distance.powf(self.parameters.locality.unwrap_or(3.));
             }
+            // eprintln!("S3:{:?}",sub_point);
         }
         let sum: Array<f64,Ix1> = self.sub_gravity_points.sum_axis(Axis(0));
+        // eprintln!("SD:{:?}", sum);
         let sum_length = sum.iter()
             .zip(self.feature_subsamples.iter())
             .map(|(x,fs)| if *fs {x.powi(2)} else {0.})
