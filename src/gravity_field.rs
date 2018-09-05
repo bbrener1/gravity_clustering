@@ -117,7 +117,7 @@ impl GravityField {
 
         self.cluster_points();
 
-        self.merge_clusters();
+        // self.merge_clusters();
 
         for cluster in &self.clusters {
             for point in &cluster.members {
