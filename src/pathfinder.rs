@@ -5,8 +5,8 @@ use rand::{Rng,ThreadRng,thread_rng};
 use std::cmp::{min,max};
 use io::Parameters;
 use ndarray_parallel::prelude::*;
-
-
+use distance;
+use length;
 
 #[derive(Debug)]
 pub struct Pathfinder {
@@ -14,7 +14,9 @@ pub struct Pathfinder {
     origin: Array<f64,Ix1>,
     skip: usize,
     samples: usize,
+    sample_indecies: Vec<usize>,
     features: usize,
+    feature_indecies: Vec<usize>,
     gravity_points: Arc<Array<f64,Ix2>>,
     sub_gravity_points: Array<f64,Ix2>,
     sample_subsamples: Vec<usize>,
@@ -34,6 +36,9 @@ impl Pathfinder {
 
         let samples = gravity_points.shape()[0];
         let features = gravity_points.shape()[1];
+
+        let sample_indecies = (0..samples).collect();
+        let feature_indecies = (0..features).collect();
 
         let mut subsample_size = gravity_points.shape()[0];
         if samples > 1000 {
@@ -55,28 +60,25 @@ impl Pathfinder {
             origin: origin,
             skip: skip,
             samples: samples,
+            sample_indecies: sample_indecies,
             features: features,
+            feature_indecies: feature_indecies,
             gravity_points: gravity_points,
             sub_gravity_points: sub_gravity_points,
             sample_subsamples: sample_subsamples,
             feature_subsamples: feature_subsamples,
-            previous_steps: VecDeque::new(),
+            previous_steps: VecDeque::with_capacity(50),
             rng: rng,
             parameters: parameters,
         }
     }
 
     fn subsample(&mut self) {
-        let mut sample_indecies = (0..self.samples).collect::<Vec<usize>>();
-        self.rng.shuffle(&mut sample_indecies);
-        sample_indecies.truncate(self.parameters.sample_subsample.unwrap_or(self.samples/20));
-        self.sample_subsamples = sample_indecies;
-
-        let mut feature_indecies = (0..self.features).collect::<Vec<usize>>();
-        self.rng.shuffle(&mut feature_indecies);
-        feature_indecies.truncate(self.parameters.feature_subsample.unwrap_or(self.features));
-        for feature in feature_indecies {
-            self.feature_subsamples[feature] = true;
+        self.rng.shuffle(&mut self.sample_indecies);
+        self.sample_subsamples = self.sample_indecies.iter().cloned().take(self.parameters.sample_subsample.unwrap_or(self.samples)).collect();
+        self.rng.shuffle(&mut self.feature_indecies);
+        for feature in self.feature_indecies.iter().take(self.parameters.feature_subsample.unwrap_or(self.features)) {
+            self.feature_subsamples[*feature] = true;
         }
 
         for (i,subsample) in self.sample_subsamples.iter().enumerate() {
@@ -88,37 +90,20 @@ impl Pathfinder {
 
     }
 
-    // fn step(&mut self) -> Array<f64,Ix1> {
-    fn step(&mut self) {
+    fn step(&mut self) -> Array<f64,Ix1> {
+    // fn step(&mut self) {
         self.subsample();
-        // for row_index in 0..self.sub_gravity_points.shape()[0] {
         for mut sub_point in self.sub_gravity_points.outer_iter_mut() {
 
-            // let mut sub_point = self.sub_gravity_points.row_mut(row_index);
-            let mut p_len_acc = 0.;
-            let locality = self.parameters.locality.unwrap_or(4.);
-            // sub_point.zip_mut_with(&self.point, |s,c| {*s -= c; sq_len_acc += s.powf(locality).abs();});
-            Zip::from(&mut sub_point).and(self.point.view()).and(self.feature_subsamples.view())
-                .apply(|sp,p,fs| {
-                    if *fs {
-                        *sp -= p;
-                        p_len_acc += sp.powi(2);
-                    }
-                    else {
-                        *sp = 0.;
-                    }
-                });
-            // let sq_len_acc = sub_point.iter().zip(self.feature_subsamples.iter()).fold(0.0,|acc,(x,fs)| if *fs {acc + x.powf(locality).abs()} else {acc});
-            p_len_acc = p_len_acc.powf((locality-1.).min(0.));
-            if p_len_acc == 0. {
+            sub_point.scaled_add(-1.,&self.point);
+            let distance = length(sub_point.view());
+            if distance == 0. {
                 sub_point.fill(0.);
             }
             else {
-                sub_point.mapv_inplace(|x| x/p_len_acc);
+                sub_point /= distance.powf(self.parameters.locality.unwrap_or(3.));
             }
-            // println!("{:?}",sub_point);
         }
-        // println!("{:?}",self.sub_gravity_points);
         let sum: Array<f64,Ix1> = self.sub_gravity_points.sum_axis(Axis(0));
         let sum_length = sum.iter()
             .zip(self.feature_subsamples.iter())
@@ -134,45 +119,70 @@ impl Pathfinder {
                 }
             });
 
-        // for (feature,shift) in self.point.iter_mut().zip(sum.iter()) {
-        //     *feature += shift/(sum_length/self.parameters.scaling_factor.unwrap_or(0.1));
-        // }
-        // return self.point.to_owned()
-        // return sum.iter().map(|x| (x/(sum_length/self.scaling_factor)).powi(2)).sum::<f64>().sqrt()
+        return self.point.to_owned()
     }
 
     pub fn descend(&mut self) -> Array<f64,Ix1> {
         for _i in 0..50 {
-            // let step = self.step();
-            // println!("Step:{:?}",step);
             self.step();
             self.previous_steps.push_front(self.point.clone());
         }
-        // println!("Steps:{:?}",self.previous_steps);
         let mut step_count = 50;
         loop {
-            // let step = self.step();
             if step_count % 100 == 0 {
-                eprintln!("Step:{:?}",step_count);
+                // eprintln!("S:{:?}",self.point);
+                // eprintln!("Step:{:?}",step_count);
             }
             self.step();
             self.previous_steps.push_front(self.point.to_owned());
             self.previous_steps.pop_back();
             let smoothed_displacement = (self.previous_steps.back().unwrap() - &self.point).fold(0.,|acc,x| acc + x.powi(2)).sqrt();
-            // if step_count%1000 == 0 {
-            //     println!("Steps:{:?}",self.previous_steps);
-            //     println!("Disp:{:?}",smoothed_displacement);
-            // }
             if smoothed_displacement < self.parameters.convergence_factor.unwrap_or(1.)*self.parameters.scaling_factor.unwrap_or(0.1) {
-                // eprintln!("Converged after {} steps", step_count);
                 break
             }
             step_count += 1;
             if step_count > 20000000 {
                 panic!("Failed to converge after 20 million steps, adjust parameters")
             }
-        }
+        };
+        // eprintln!("{:?}",self.point);
         self.point.to_owned()
+    }
+
+    pub fn fuzzy_descend(&mut self, fuzz:usize) -> (Array<f64,Ix1>,(f64,f64)) {
+
+        let mut final_points: Array<f64,Ix2> = Array::zeros((fuzz,self.features));
+
+        for i in 0..fuzz {
+            self.reset();
+            final_points.row_mut(i).assign(&self.descend());
+        }
+
+        let average_point = final_points.sum_axis(Axis(0))/fuzz as f64;
+
+        // eprintln!("Average:{:?}",average_point);
+
+        let mut av_deviation = 0.;
+
+        for mut final_point in final_points.outer_iter_mut() {
+            final_point.scaled_add(-1.,&average_point);
+            av_deviation += length(final_point.view())/fuzz as f64;
+        }
+
+        eprintln!("Deviation:{:?}",av_deviation);
+
+        let displacement = length((&self.origin - &average_point).view());
+
+        eprintln!("Displacement:{:?}",displacement);
+
+        (average_point,(av_deviation,displacement))
+
+    }
+
+    pub fn reset(&mut self) {
+        self.point = self.origin.clone();
+        self.previous_steps.truncate(0);
+
     }
 
 

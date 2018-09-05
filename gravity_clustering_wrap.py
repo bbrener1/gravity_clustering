@@ -31,7 +31,7 @@ def fit_predict(targets,feature_sub=None,sample_sub=None,scaling=None,merge_dist
 
     print("Running " + str(path_to_rust))
 
-    arg_list = [str(path_to_rust),"fitpredict"]
+    arg_list = [str(path_to_rust),"fuzzy_predict"]
     arg_list.extend(["-stdin"])
     arg_list.extend(["-stdout"])
     if sample_sub is not None:
@@ -48,6 +48,8 @@ def fit_predict(targets,feature_sub=None,sample_sub=None,scaling=None,merge_dist
         arg_list.extend(["-convergence",str(convergence_factor)])
     if locality is not None:
         arg_list.extend(["-l",str(locality)])
+
+    print("Command: " + " ".join(arg_list))
 
     cp = sp.run(arg_list,input=targets,stdout=sp.PIPE,stderr=sp.PIPE,universal_newlines=True)
 

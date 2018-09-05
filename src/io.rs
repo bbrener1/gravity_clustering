@@ -132,10 +132,10 @@ impl Parameters {
                     arg_struct.dump_error = Some(args.next().expect("Error processing error destination"))
                 },
                 "-convergence" => {
-                    arg_struct.convergence_factor = Some(args.next().map(|x| x.parse::<f64>()).expect("Convergence distance parse error. Not a number?").expect("Iteration error"))
+                    arg_struct.convergence_factor = Some(args.next().map(|x| x.parse::<f64>()).expect("Convergence distance parse error. Not a number?").expect("Iteration error"));
                 },
                 "-l" | "-locality" => {
-                    arg_struct.convergence_factor = Some(args.next().map(|x| x.parse::<f64>()).expect("Locality parse error. Not a number?").expect("Iteration error"))
+                    arg_struct.locality = Some(args.next().map(|x| x.parse::<f64>()).expect("Locality parse error. Not a number?").expect("Iteration error"))
                 },
                 "-r" | "-refining" => {
                     arg_struct.refining = true;
@@ -382,6 +382,7 @@ pub enum Command {
     Fit,
     Predict,
     FitPredict,
+    Fuzzy,
 }
 
 impl Command {
@@ -389,15 +390,10 @@ impl Command {
     pub fn parse(command: &str) -> Command {
 
         match &command[..] {
-            "fit" => {
-                Command::Fit
-            },
-            "predict" => {
-                Command::Predict
-            },
-            "fitpredict" | "fit_predict" | "combined" => {
-                Command::FitPredict
-            }
+            "fit" => Command::Fit,
+            "predict" => Command::Predict,
+            "fitpredict" | "fit_predict" | "combined" => Command::FitPredict,
+            "fuzzy_predict" | "fuzzy" => Command::Fuzzy,
             _ =>{
                 println!("Not a valid top-level command, please choose from \"fit\",\"predict\", or \"fitpredict\". Exiting");
                 panic!()
