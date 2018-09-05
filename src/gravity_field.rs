@@ -151,8 +151,8 @@ impl GravityField {
                     let point = final_positions.row(point_index);
 
                     for cluster in self.clusters.iter_mut() {
-                        // if distance(point,cluster.center.view()) < self.fuzz[point_index].0 * 2.{
-                        if distance(point,cluster.center.view()) < self.parameters.scaling_factor.unwrap_or(0.1) * self.parameters.convergence_factor.unwrap_or(5.){
+                        if distance(point,cluster.center.view()) < self.fuzz[point_index].0 * 2.{
+                        // if distance(point,cluster.center.view()) < self.parameters.scaling_factor.unwrap_or(0.1) * self.parameters.convergence_factor.unwrap_or(5.){
                             cluster.merge_point(point,point_index);
                             moved_points.push(point_index);
                             break
