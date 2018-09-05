@@ -78,6 +78,18 @@ fn main() -> Result<(),Error> {
         Command::Fuzzy => {
             field.fuzzy_fit();
             let mut predictions = field.fuzzy_predict();
+
+            if parameters.refining {
+                let mut refining_parameters = Arc::make_mut(&mut parameters).clone();
+
+                let mut refining_field = GravityField::init(field.final_positions.unwrap(),Arc::new(refining_parameters));
+
+                refining_field.fuzzy_fit();
+                predictions = refining_field.fuzzy_predict();
+
+                field = refining_field;
+            }
+
             write_vector(predictions, &parameters.report_address)?;
             if parameters.dump_error.is_some() {
                 write_array(field.final_positions.unwrap(), &parameters.dump_error.clone().map(|x| [x,"final_pos.tsv".to_string()].join("")))?;
