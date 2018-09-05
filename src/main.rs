@@ -82,6 +82,8 @@ fn main() -> Result<(),Error> {
             if parameters.refining {
                 let mut refining_parameters = Arc::make_mut(&mut parameters).clone();
 
+                refining_parameters.scaling_factor = refining_parameters.scaling_factor.map(|x| x/5.);
+
                 let mut refining_field = GravityField::init(field.final_positions.unwrap(),Arc::new(refining_parameters));
 
                 refining_field.fuzzy_fit();
