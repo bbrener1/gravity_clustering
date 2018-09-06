@@ -20,7 +20,7 @@ pub struct Pathfinder {
     gravity_points: Arc<Array<f64,Ix2>>,
     sub_gravity_points: Array<f64,Ix2>,
     sample_subsamples: Vec<usize>,
-    feature_subsamples: Array<bool,Ix1>,
+    feature_subsamples: Vec<usize>,
     previous_steps: VecDeque<Array<f64,Ix1>>,
     rng: ThreadRng,
     parameters: Arc<Parameters>,
@@ -44,13 +44,13 @@ impl Pathfinder {
         let mut subsample_size = gravity_points.shape()[0];
         if samples > 1000 {
             subsample_size = max(min(1000, samples/10),2);
-        }
+        };
         if parameters.sample_subsample.is_some() {
             subsample_size = parameters.sample_subsample.unwrap();
-        }
-
-        let sample_subsamples = Vec::new();
-        let feature_subsamples = Array::from_elem(features,false);
+        };
+        let feature_subsample_size = parameters.feature_subsample.unwrap();
+        let sample_subsamples = Vec::with_capacity(subsample_size);
+        let feature_subsamples = Vec::with_capacity(parameters.feature_subsample.unwrap_or(features));
 
         let mut sub_gravity_points = Array::zeros((subsample_size,features));
 
@@ -78,11 +78,11 @@ impl Pathfinder {
         self.rng.shuffle(&mut self.sample_indecies);
         self.sample_subsamples = self.sample_indecies.iter().cloned().take(self.parameters.sample_subsample.unwrap_or(self.samples)).collect();
         self.rng.shuffle(&mut self.feature_indecies);
-        for feature in self.feature_indecies.iter().take(self.parameters.feature_subsample.unwrap_or(self.features)) {
-            self.feature_subsamples[*feature] = true;
-        }
-        for (i,subsample) in self.sample_subsamples.iter().enumerate() {
-            self.sub_gravity_points.row_mut(i).assign(&self.gravity_points.row(*subsample));
+        self.feature_subsamples = self.feature_indecies.iter().cloned().take(self.parameters.feature_subsample.unwrap_or(self.features)).collect();
+        for (i,ss) in self.sample_subsamples.iter().enumerate() {
+            for (j,fs) in self.feature_subsamples.iter().enumerate() {
+                self.sub_gravity_points[[i,j]] = self.gravity_points[[*ss,*fs]]
+            }
         }
 
     }
@@ -94,8 +94,8 @@ impl Pathfinder {
             // eprintln!("S1:{:?}",sub_point);
             sub_point.scaled_add(-1.,&self.point);
             // eprintln!("S2:{:?}",sub_point);
-            let distance: f64 = sub_point.iter().map(|x| x.abs()).sum();
-            // let distance = length(sub_point.view());
+            // let distance: f64 = sub_point.iter().map(|x| x.abs()).sum();
+            let distance = length(sub_point.view());
             if distance == 0. {
                 sub_point.fill(0.);
             }
@@ -106,21 +106,16 @@ impl Pathfinder {
             }
             // eprintln!("S3:{:?}",sub_point);
         }
-        let sum: Array<f64,Ix1> = self.sub_gravity_points.sum_axis(Axis(0));
+        let mut sum: Array<f64,Ix1> = self.sub_gravity_points.sum_axis(Axis(0));
         // eprintln!("SD:{:?}", sum);
-        let sum_length = sum.iter()
-            .zip(self.feature_subsamples.iter())
-            .map(|(x,fs)| if *fs {x.powi(2)} else {0.})
-            .sum::<f64>().sqrt();
-
+        let sum_length = length(sum.view());
         let scaling_factor = self.parameters.scaling_factor.unwrap_or(0.1);
 
-        Zip::from(&mut self.point).and(&sum).and(self.feature_subsamples.view())
-            .apply(|pf,sf,fs| {
-                if *fs {
-                    *pf += sf / (sum_length / scaling_factor);
-                }
-            });
+        sum /= sum_length / scaling_factor;
+
+        for (feature,shift) in self.feature_subsamples.iter().zip(sum.iter()) {
+            self.point[*feature] += shift;
+        }
 
         return self.point.to_owned()
     }
