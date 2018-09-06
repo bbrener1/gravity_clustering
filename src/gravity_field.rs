@@ -153,6 +153,10 @@ impl GravityField {
                     for cluster in self.clusters.iter_mut() {
                         if distance(point,cluster.center.view()) < self.fuzz[point_index].0 * 2.{
                         // if distance(point,cluster.center.view()) < self.parameters.scaling_factor.unwrap_or(0.1) * self.parameters.convergence_factor.unwrap_or(5.){
+                            // eprintln!("ID:{:?}",cluster.id);
+                            // eprintln!("CM:{:?}",distance(point,cluster.center.view()));
+                            // eprintln!("CC:{:?}",cluster.center);
+                            // eprintln!("PC:{:?}",point);
                             cluster.merge_point(point,point_index);
                             moved_points.push(point_index);
                             break
@@ -166,12 +170,12 @@ impl GravityField {
 
                 if moved_points.len() < 1 {
                     let new_cluster_point = self.best_cluster_candidate(Some(&available_points)).unwrap();
-                    let new_cluster = Cluster::init(self.clusters.len(), final_positions.row(new_cluster_point), new_cluster_point);
+                    let new_cluster = Cluster::init(self.clusters.len()+1, final_positions.row(new_cluster_point), new_cluster_point);
                     self.clusters.push(new_cluster);
                 }
 
-                eprintln!("Unclustered:{:?}",available_points.len());
-                eprintln!("Clusters:{:?}",self.clusters.len());
+                // eprintln!("Unclustered:{:?}",available_points.len());
+                // eprintln!("Clusters:{:?}",self.clusters.len());
 
             }
 
@@ -287,6 +291,12 @@ impl GravityField {
             point.1/self.parameters.scaling_factor.unwrap_or(0.1)
         }
     }
+
+    // pub fn write_clusters(&self) -> Array<f64,Ix2> {
+    //     let array = Array::zeros((self.clusters.len(),self.gravity_points.shape()[1]));
+    //     for cluster in kk
+    //     array
+    // }
 }
 
 #[derive(Clone)]

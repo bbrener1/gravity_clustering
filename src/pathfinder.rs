@@ -37,7 +37,8 @@ impl Pathfinder {
         let samples = gravity_points.shape()[0];
         let features = gravity_points.shape()[1];
 
-        let sample_indecies = (0..samples).collect();
+        let mut sample_indecies: Vec<usize> = (0..samples).collect();
+        sample_indecies.remove(skip);
         let feature_indecies = (0..features).collect();
 
         let mut subsample_size = gravity_points.shape()[0];
@@ -80,11 +81,7 @@ impl Pathfinder {
         for feature in self.feature_indecies.iter().take(self.parameters.feature_subsample.unwrap_or(self.features)) {
             self.feature_subsamples[*feature] = true;
         }
-
         for (i,subsample) in self.sample_subsamples.iter().enumerate() {
-            if *subsample == self.skip {
-                continue
-            }
             self.sub_gravity_points.row_mut(i).assign(&self.gravity_points.row(*subsample));
         }
 
@@ -97,7 +94,8 @@ impl Pathfinder {
             // eprintln!("S1:{:?}",sub_point);
             sub_point.scaled_add(-1.,&self.point);
             // eprintln!("S2:{:?}",sub_point);
-            let distance = length(sub_point.view());
+            let distance: f64 = sub_point.iter().map(|x| x.abs()).sum();
+            // let distance = length(sub_point.view());
             if distance == 0. {
                 sub_point.fill(0.);
             }
