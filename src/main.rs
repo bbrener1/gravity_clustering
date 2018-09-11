@@ -10,6 +10,7 @@ extern crate ndarray_parallel;
 extern crate rayon;
 
 mod pathfinder;
+mod nearest_pathfinder;
 mod io;
 mod gravity_field;
 use io::{write_array,write_vector};

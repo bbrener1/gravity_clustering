@@ -15,7 +15,7 @@ def main():
     counts = np.loadtxt(sys.argv[1])
     fit_predict(counts,scaling=.1,sample_sub=10)
 
-def fit_predict(targets,feature_sub=None,sample_sub=None,scaling=None,merge_distance=None,error_dump=None,convergence_factor=None,locality=None):
+def fit_predict(targets,feature_sub=None,sample_sub=None,scaling=None,merge_distance=None,refining=False,error_dump=None,convergence_factor=None,locality=None):
 
     # np.array(targets)
 
@@ -48,6 +48,8 @@ def fit_predict(targets,feature_sub=None,sample_sub=None,scaling=None,merge_dist
         arg_list.extend(["-convergence",str(convergence_factor)])
     if locality is not None:
         arg_list.extend(["-l",str(locality)])
+    if refining:
+        arg_list.extend(["-refining"])
 
     print("Command: " + " ".join(arg_list))
 

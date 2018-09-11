@@ -7,7 +7,7 @@ use rayon::prelude::*;
 
 use io::Parameters;
 
-use pathfinder::Pathfinder;
+use nearest_pathfinder::Pathfinder;
 use distance;
 use length;
 
@@ -151,7 +151,7 @@ impl GravityField {
                     let point = final_positions.row(point_index);
 
                     for cluster in self.clusters.iter_mut() {
-                        if distance(point,cluster.center.view()) < self.fuzz[point_index].0 * 2.{
+                        if distance(point,cluster.center.view()) < self.fuzz[point_index].0 * 3. {
                         // if distance(point,cluster.center.view()) < self.parameters.scaling_factor.unwrap_or(0.1) * self.parameters.convergence_factor.unwrap_or(5.){
                             // eprintln!("ID:{:?}",cluster.id);
                             // eprintln!("CM:{:?}",distance(point,cluster.center.view()));
@@ -169,13 +169,18 @@ impl GravityField {
                 }
 
                 if moved_points.len() < 1 {
-                    let new_cluster_point = self.best_cluster_candidate(Some(&available_points)).unwrap();
-                    let new_cluster = Cluster::init(self.clusters.len()+1, final_positions.row(new_cluster_point), new_cluster_point);
-                    self.clusters.push(new_cluster);
+                    if let Some(new_cluster_point) = self.best_cluster_candidate(Some(&available_points)) {
+                        available_points.remove(&new_cluster_point);
+                        let new_cluster = Cluster::init(self.clusters.len()+1, final_positions.row(new_cluster_point), new_cluster_point);
+                        self.clusters.push(new_cluster);
+                    }
+                    else {
+                        break
+                    }
                 }
 
-                // eprintln!("Unclustered:{:?}",available_points.len());
-                // eprintln!("Clusters:{:?}",self.clusters.len());
+                eprintln!("Unclustered:{:?}",available_points.len());
+                eprintln!("Clusters:{:?}",self.clusters.len());
 
             }
 
@@ -189,7 +194,7 @@ impl GravityField {
     pub fn convergent_points(&self) -> Vec<usize> {
         let mut convergent_points = Vec::new();
         for (i,fuzz) in self.fuzz.iter().enumerate() {
-            if fuzz.0 < self.parameters.scaling_factor.unwrap_or(0.1) * self.parameters.convergence_factor.unwrap_or(5.) {
+            if fuzz.0 < self.parameters.scaling_factor.unwrap_or(0.1) * self.parameters.convergence_factor.unwrap_or(5.) * 2. {
                 convergent_points.push(i);
             }
             // else { eprintln!("conv:{},{},{}", fuzz.0,self.parameters.scaling_factor.unwrap_or(0.1),self.parameters.convergence_factor.unwrap_or(5.)) }
