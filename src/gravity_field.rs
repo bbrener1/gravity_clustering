@@ -132,7 +132,7 @@ impl GravityField {
 
         let final_positions = self.final_positions.as_ref().unwrap();
 
-        let mut available_points: HashSet<usize> = self.convergent_points().into_iter().collect();
+        let mut available_points: HashSet<usize> = (0..final_positions.shape()[0]).into_iter().collect();
 
         let first_cluster_candidate = self.best_cluster_candidate(Some(&available_points));
 

@@ -160,7 +160,7 @@ impl Pathfinder {
         loop {
             if step_count % 100 == 0 {
                 // eprintln!("S:{:?}",self.point);
-                // eprintln!("Step:{:?}",step_count);
+                eprintln!("Step:{:?}",step_count);
             }
             if self.step().is_none() {
             //     motionless_count += 1;
