@@ -1,6 +1,7 @@
 use ndarray::{Array,ArrayView,Ix1,Ix2,Axis};
 use std::f64;
 use std::sync::Arc;
+use std::collections::VecDeque;
 use rand::{Rng,ThreadRng,thread_rng};
 use std::cmp::{min,max};
 use io::Parameters;
@@ -16,11 +17,9 @@ pub struct Pathfinder {
     samples: usize,
     sample_indecies: Vec<usize>,
     features: usize,
-    // feature_indecies: Vec<usize>,
     points: Arc<Array<f64,Ix2>>,
     sample_subsamples: Vec<usize>,
-    // feature_subsamples: Vec<usize>,
-    previous_jump: Option<f64>,
+    previous_steps: VecDeque<Array<f64,Ix1>>,
     rng: ThreadRng,
     parameters: Arc<Parameters>,
 }
@@ -64,7 +63,7 @@ impl Pathfinder {
             features: features,
             points: points,
             sample_subsamples: sample_subsamples,
-            previous_jump: None,
+            previous_steps: VecDeque::with_capacity(50),
             rng: rng,
             parameters: parameters,
         }
@@ -79,9 +78,11 @@ impl Pathfinder {
         // }
     }
 
-    fn subsampled_nearest(&mut self, _previous_jump: f64) -> Option<(Array<f64,Ix1>,f64)> {
+    fn subsampled_nearest(&mut self) -> Option<(Array<f64,Ix1>,f64)> {
 
         self.subsample();
+
+        // eprintln!("SS:{:?}",self.sample_subsamples);
 
         let mut jump_point = None;
 
@@ -92,7 +93,7 @@ impl Pathfinder {
             // eprintln!("S1:{:?}",self.points.row(*sub_point_index).view());
             // eprintln!("D:{:?}",distance(self.point.view(),self.points.row(*sub_point_index).view()));
             let point_distance = distance(self.point.view(),self.points.row(*sub_point_index).view());
-            if point_distance < maximum_jump_distance && point_distance > 0. {
+            if (point_distance < maximum_jump_distance) && point_distance > 0. {
                 maximum_jump_distance = point_distance;
                 jump_point = Some(sub_point_index);
             }
@@ -102,26 +103,24 @@ impl Pathfinder {
 
     }
 
-    pub fn step(&mut self) -> Option<()> {
+    pub fn step(&mut self) -> Option<f64> {
 
         if self.point.iter().sum::<f64>() == 0. {
             eprintln!("Moved to zero:{:?}",self.point);
             panic!();
         }
 
-        let mut previous_jump = self.previous_jump.unwrap_or(f64::MAX);
-
         let mut jump_point = Array::zeros(self.features);
-        let mut total_distance = 0.;
+        // let mut total_distance = 0.;
         let mut bag_counter = 0;
 
-        for _i in 0..10 {
-            if let Some((bagged_point,jump_distance)) = self.subsampled_nearest(previous_jump) {
+        for _i in 0..20 {
+            if let Some((bagged_point,jump_distance)) = self.subsampled_nearest() {
                 // eprintln!("BP:{:?}",bagged_point);
                 // eprintln!("BC1:{:?}",bag_counter);
                 // eprintln!("JP1:{:?}",jump_point);
                 jump_point += &bagged_point;
-                total_distance += jump_distance;
+                // total_distance += jump_distance;
                 bag_counter += 1;
                 // eprintln!("BC2:{:?}",bag_counter);
                 // eprintln!("JP2:{:?}",jump_point);
@@ -131,43 +130,58 @@ impl Pathfinder {
         if bag_counter > 0 {
 
             jump_point /= bag_counter as f64;
-            let mean_distance = total_distance / bag_counter as f64;
+            // let mean_distance = total_distance / bag_counter as f64;
 
             // eprintln!("J:{:?}",jump_point);
 
             let jump_distance = distance(jump_point.view(),self.point.view());
 
-            if jump_distance > (mean_distance / self.parameters.convergence_factor.unwrap_or(10.)) {
-
+            if jump_distance == 0. {
                 // eprintln!("P:{:?}",self.point);
                 // eprintln!("J:{:?}",jump_point);
                 // eprintln!("MD:{:?}",mean_distance);
                 // eprintln!("JD:{:?}",jump_distance);
-
-                self.previous_jump = Some(jump_distance);
-                self.point = jump_point;
-                return Some(())
+                panic!()
             }
+
+
+            self.point = jump_point;
+            return Some(jump_distance)
         }
 
-        return None
-
+        None
     }
 
     pub fn descend(&mut self) -> Array<f64,Ix1> {
         let mut motionless_count = 0;
         let mut step_count = 0;
+
+        for _i in 0..20 {
+            self.step();
+            self.previous_steps.push_front(self.point.clone());
+        }
+
         loop {
+            let mut motionless_count = 0;
+            let jdo = self.step();
             if step_count % 100 == 0 {
-                // eprintln!("S:{:?}",self.point);
-                eprintln!("Step:{:?}",step_count);
+                // eprintln!("J:{:?}",jdo);
+                // eprintln!("Step:{:?}",step_count);
             }
-            if self.step().is_none() {
-            //     motionless_count += 1;
-            // };
-            // if motionless_count > 50 {
-                break
-            };
+            if let Some(jump_distance) = jdo {
+                // eprintln!("J:{:?}",jump_distance);
+                self.previous_steps.push_front(self.point.clone());
+                let distant_point = self.previous_steps.pop_back().unwrap();
+                if distance(distant_point.view(),self.point.view()) < jump_distance * self.parameters.convergence_factor.unwrap_or(3.) {
+                    break
+                }
+            }
+            else {
+                motionless_count += 0;
+                if motionless_count > 50 {
+                    break
+                }
+            }
             step_count += 1;
             if step_count > 20000000 {
                 panic!("Failed to converge after 20 million steps, adjust parameters")
@@ -209,7 +223,7 @@ impl Pathfinder {
 
     pub fn reset(&mut self) {
         self.point = self.origin.clone();
-        self.previous_jump = None;
+        self.previous_steps.clear();
     }
 
 
