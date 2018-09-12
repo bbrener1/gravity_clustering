@@ -11,6 +11,7 @@ use nearest_pathfinder::Pathfinder;
 use distance;
 use length;
 
+
 pub struct GravityField {
     pub gravity_points: Arc<Array<f64,Ix2>>,
     pub final_positions: Option<Array<f64,Ix2>>,
@@ -96,6 +97,10 @@ impl GravityField {
                 pathfinder.fuzzy_descend(10)
             })
             .collect();
+
+        eprintln!("#########################################");
+        eprintln!("#########################################");
+        eprintln!("#########################################");
 
         let mut final_positions: Array<f64,Ix2> = Array::zeros((self.gravity_points.shape()[0],self.gravity_points.shape()[1]));
         let mut fuzz_vec = Vec::with_capacity(fuzzy_positions.len());

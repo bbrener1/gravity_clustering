@@ -30,6 +30,7 @@ pub struct Parameters {
     pub convergence_factor: Option<f64>,
     pub locality: Option<f64>,
     pub refining: bool,
+    pub smoothing: Option<usize>,
 
     count_array_file: String,
     feature_header_file: Option<String>,
@@ -62,6 +63,7 @@ impl Parameters {
             convergence_factor: None,
             locality: None,
             refining: false,
+            smoothing: None,
 
             scaling_factor: None,
 
@@ -134,6 +136,10 @@ impl Parameters {
                 "-convergence" => {
                     arg_struct.convergence_factor = Some(args.next().map(|x| x.parse::<f64>()).expect("Convergence distance parse error. Not a number?").expect("Iteration error"));
                 },
+                "-smoothing" => {
+                    arg_struct.smoothing = Some(args.next().map(|x| x.parse::<usize>()).expect("Smoothing distance parse error. Not a number?").expect("Iteration error"));
+                },
+
                 "-l" | "-locality" => {
                     arg_struct.locality = Some(args.next().map(|x| x.parse::<f64>()).expect("Locality parse error. Not a number?").expect("Iteration error"))
                 },

@@ -72,7 +72,7 @@ impl Pathfinder {
 
     fn subsample(&mut self) {
         self.rng.shuffle(&mut self.sample_indecies);
-        self.sample_subsamples = self.sample_indecies.iter().cloned().take(self.parameters.sample_subsample.unwrap_or(self.samples)).collect();
+        self.sample_subsamples = self.sample_indecies.iter().cloned().take(self.parameters.sample_subsample.unwrap_or(10)).collect();
         // for (i,ss) in self.sample_subsamples.iter().enumerate() {
         //     self.sub_points.row_mut(i).assign(&self.points.row(i));
         // }
@@ -103,46 +103,96 @@ impl Pathfinder {
 
     }
 
+    fn subsampled_nearest_n(&mut self,n: usize) -> Vec<(Array<f64,Ix1>,f64)> {
+
+        self.subsample();
+
+        let mut sub_points: Vec<(Array<f64,Ix1>,f64)> = Vec::with_capacity(n+1);
+
+        // eprintln!("SS:{:?}",self.sample_subsamples);
+
+        if let Some(first_index) = self.sample_subsamples.get(0) {
+            let first_subsample = self.points.row(*first_index);
+            sub_points.push((first_subsample.to_owned(),distance(self.point.view(), first_subsample.view())));
+        }
+
+        for sub_point_index in &self.sample_subsamples {
+
+            let sub_point = self.points.row(*sub_point_index);
+            let sub_point_distance = distance(self.point.view(),sub_point.view());
+
+            let mut insert_index = None;
+
+            for (i,(previous_point,previous_distance)) in sub_points.iter().enumerate() {
+                if sub_point_distance < *previous_distance {
+                    insert_index = Some(i);
+                    break
+                }
+            }
+
+            if let Some(insert) = insert_index {
+                sub_points.insert(insert,(sub_point.to_owned(),sub_point_distance));
+            }
+
+            sub_points.truncate(n+1);
+
+        }
+
+        sub_points
+
+    }
+
+
     pub fn step(&mut self) -> Option<f64> {
 
-        if self.point.iter().sum::<f64>() == 0. {
-            eprintln!("Moved to zero:{:?}",self.point);
-            panic!();
-        }
+        // if self.point.iter().sum::<f64>() == 0. {
+        //     eprintln!("Moved to zero:{:?}",self.point);
+        //     panic!();
+        // }
+        let smoothing = self.parameters.smoothing.unwrap_or(5);
 
         let mut jump_point = Array::zeros(self.features);
         // let mut total_distance = 0.;
         let mut bag_counter = 0;
 
-        for _i in 0..20 {
-            if let Some((bagged_point,jump_distance)) = self.subsampled_nearest() {
-                // eprintln!("BP:{:?}",bagged_point);
-                // eprintln!("BC1:{:?}",bag_counter);
-                // eprintln!("JP1:{:?}",jump_point);
-                jump_point += &bagged_point;
-                // total_distance += jump_distance;
-                bag_counter += 1;
-                // eprintln!("BC2:{:?}",bag_counter);
-                // eprintln!("JP2:{:?}",jump_point);
-            }
+        // for _i in 0..self.parameters.smoothing.unwrap_or(5) {
+        //
+        //     if let Some((bagged_point,jump_distance)) = self.subsampled_nearest() {
+        //         // eprintln!("BP:{:?}",bagged_point);
+        //         // eprintln!("BC1:{:?}",bag_counter);
+        //         // eprintln!("JP1:{:?}",jump_point);
+        //         jump_point += &bagged_point;
+        //         // total_distance += jump_distance;
+        //         bag_counter += 1;
+        //         // eprintln!("BC2:{:?}",bag_counter);
+        //         // eprintln!("JP2:{:?}",jump_point);
+        //     }
+        // };
+
+        for (bagged_point,_jump_distance) in self.subsampled_nearest_n(smoothing) {
+            jump_point += &bagged_point;
+            bag_counter += 1;
         };
+
 
         if bag_counter > 0 {
 
             jump_point /= bag_counter as f64;
             // let mean_distance = total_distance / bag_counter as f64;
 
+            jump_point = (jump_point * 0.3) + (&self.point * 0.7);
+
             // eprintln!("J:{:?}",jump_point);
 
             let jump_distance = distance(jump_point.view(),self.point.view());
 
-            if jump_distance == 0. {
-                // eprintln!("P:{:?}",self.point);
-                // eprintln!("J:{:?}",jump_point);
-                // eprintln!("MD:{:?}",mean_distance);
-                // eprintln!("JD:{:?}",jump_distance);
-                panic!()
-            }
+            // if jump_distance == 0. {
+            //     // eprintln!("P:{:?}",self.point);
+            //     // eprintln!("J:{:?}",jump_point);
+            //     // eprintln!("MD:{:?}",mean_distance);
+            //     // eprintln!("JD:{:?}",jump_distance);
+            //     panic!()
+            // }
 
 
             self.point = jump_point;
@@ -154,12 +204,13 @@ impl Pathfinder {
 
     pub fn descend(&mut self) -> Array<f64,Ix1> {
         let mut motionless_count = 0;
-        let mut step_count = 0;
 
-        for _i in 0..20 {
+        for _i in 0..10 {
             self.step();
             self.previous_steps.push_front(self.point.clone());
         }
+
+        let mut step_count = 10;
 
         loop {
             let mut motionless_count = 0;
