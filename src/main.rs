@@ -12,9 +12,10 @@ extern crate rayon;
 mod pathfinder;
 mod nearest_pathfinder;
 mod io;
-mod gravity_field;
+mod mobile_gravity_field;
+mod single_pathfinder;
 use io::{write_array,write_vector};
-use gravity_field::GravityField;
+use mobile_gravity_field::GravityField;
 use io::{Parameters,Command};
 use ndarray::{Array,Axis,Ix1,Zip,ArrayView};
 use std::sync::Arc;
@@ -40,44 +41,44 @@ fn main() -> Result<(),Error> {
 
     match parameters.command {
         Command::Fit => {
-            field.fit();
+            // field.fit();
             Ok(())
         },
         Command::Predict => {
-            field.predict();
+            // field.predict();
             Ok(())
         }
         Command::FitPredict => {
-            field.fit();
-            let mut predictions = field.predict();
+            // field.fit();
+            // let mut predictions = field.predict();
 
-            if parameters.refining {
-                let mut refining_parameters = Arc::make_mut(&mut parameters).clone();
-
-                let mut refining_field = GravityField::init(field.final_positions.unwrap(),Arc::new(refining_parameters));
-
-                refining_field.fit();
-                predictions = refining_field.predict();
-
-                field = refining_field;
-            }
-
-            write_vector(predictions, &parameters.report_address)?;
-
-            if parameters.dump_error.is_some() {
-                write_array(field.final_positions.unwrap(), &parameters.dump_error.clone().map(|x| [x,"final_pos.tsv".to_string()].join("")))?;
-                // let clusters: Vec<Array<f64,Ix1>> = field.clusters.iter().map(|x| x.id).collect();
-                // let mut cluster_acc = Array::zeros((0,field.gravity_points.shape()[1]));
-                // for cluster in clusters {
-                //     cluster_acc = stack!(Axis(0),cluster_acc,cluster.insert_axis(Axis(1)).t());
-                // }
-                // // eprintln!("{:?}",cluster_acc.shape());
-                // write_array(cluster_acc, &parameters.dump_error.clone().map(|x| [x,"clusters.tsv".to_string()].join("")))?;
-            }
+            // if parameters.refining {
+            //     let mut refining_parameters = Arc::make_mut(&mut parameters).clone();
+            //
+            //     let mut refining_field = GravityField::init(field.final_positions.unwrap(),Arc::new(refining_parameters));
+            //
+            //     refining_field.fit();
+            //     predictions = refining_field.predict();
+            //
+            //     field = refining_field;
+            // }
+            //
+            // write_vector(predictions, &parameters.report_address)?;
+            //
+            // if parameters.dump_error.is_some() {
+            //     write_array(field.final_positions.unwrap(), &parameters.dump_error.clone().map(|x| [x,"final_pos.tsv".to_string()].join("")))?;
+            //     // let clusters: Vec<Array<f64,Ix1>> = field.clusters.iter().map(|x| x.id).collect();
+            //     // let mut cluster_acc = Array::zeros((0,field.gravity_points.shape()[1]));
+            //     // for cluster in clusters {
+            //     //     cluster_acc = stack!(Axis(0),cluster_acc,cluster.insert_axis(Axis(1)).t());
+            //     // }
+            //     // // eprintln!("{:?}",cluster_acc.shape());
+            //     // write_array(cluster_acc, &parameters.dump_error.clone().map(|x| [x,"clusters.tsv".to_string()].join("")))?;
+            // }
             Ok(())
         },
         Command::Fuzzy => {
-            field.fuzzy_fit();
+            let mut final_positions = field.fuzzy_fit();
             let mut predictions = field.fuzzy_predict();
 
             if parameters.refining {
@@ -85,9 +86,9 @@ fn main() -> Result<(),Error> {
 
                 refining_parameters.scaling_factor = refining_parameters.scaling_factor.map(|x| x/5.);
 
-                let mut refining_field = GravityField::init(field.final_positions.unwrap(),Arc::new(refining_parameters));
+                let mut refining_field = GravityField::init(final_positions,Arc::new(refining_parameters));
 
-                refining_field.fuzzy_fit();
+                final_positions = refining_field.fuzzy_fit();
                 predictions = refining_field.fuzzy_predict();
 
                 field = refining_field;
@@ -95,7 +96,7 @@ fn main() -> Result<(),Error> {
 
             write_vector(predictions, &parameters.report_address)?;
             if parameters.dump_error.is_some() {
-                write_array(field.final_positions.unwrap(), &parameters.dump_error.clone().map(|x| [x,"final_pos.tsv".to_string()].join("")))?;
+                write_array(final_positions, &parameters.dump_error.clone().map(|x| [x,"final_pos.tsv".to_string()].join("")))?;
             }
             Ok(())
         },
