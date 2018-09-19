@@ -7,6 +7,7 @@ use std::cmp::{min,max};
 use io::Parameters;
 use ndarray_parallel::prelude::*;
 use distance;
+use cos_similarity;
 use length;
 
 #[derive(Debug)]
@@ -110,33 +111,39 @@ impl Pathfinder {
         let mut sub_points: Vec<(Array<f64,Ix1>,f64)> = Vec::with_capacity(n+1);
 
         // eprintln!("SS:{:?}",self.sample_subsamples);
+        // eprintln!("P:{:?}", self.point.iter().zip(0..self.features).filter(|x| *x.0 > 0.).collect::<Vec<(&f64,usize)>>());
 
         if let Some(first_index) = self.sample_subsamples.get(0) {
             let first_subsample = self.points.row(*first_index);
-            sub_points.push((first_subsample.to_owned(),distance(self.point.view(), first_subsample.view())));
+            sub_points.push((first_subsample.to_owned(),cos_similarity(self.point.view(), first_subsample.view())));
         }
 
         for sub_point_index in &self.sample_subsamples {
 
             let sub_point = self.points.row(*sub_point_index);
-            let sub_point_distance = distance(self.point.view(),sub_point.view());
+            let sub_point_similarity = cos_similarity(self.point.view(),sub_point.view());
 
             let mut insert_index = None;
 
-            for (i,(previous_point,previous_distance)) in sub_points.iter().enumerate() {
-                if sub_point_distance < *previous_distance {
+            for (i,(previous_point,previous_similarity)) in sub_points.iter().enumerate() {
+                if sub_point_similarity > *previous_similarity {
                     insert_index = Some(i);
                     break
                 }
             }
 
             if let Some(insert) = insert_index {
-                sub_points.insert(insert,(sub_point.to_owned(),sub_point_distance));
+                sub_points.insert(insert,(sub_point.to_owned(),sub_point_similarity));
             }
 
             sub_points.truncate(n+1);
 
         }
+
+        // for neighbor in &sub_points {
+        //     eprintln!("N:{:?}", neighbor.0.iter().zip(0..self.features).filter(|x| *x.0 > 0.).collect::<Vec<(&f64,usize)>>());
+        //     eprintln!("D:{:?}", neighbor.1);
+        // }
 
         sub_points
 
@@ -179,8 +186,9 @@ impl Pathfinder {
 
             jump_point /= bag_counter as f64;
             // let mean_distance = total_distance / bag_counter as f64;
+            // eprintln!("J:{:?}",jump_point);
 
-            jump_point = (jump_point * 0.3) + (&self.point * 0.7);
+            jump_point = (jump_point * 0.1) + (&self.point * 0.9);
 
             // eprintln!("J:{:?}",jump_point);
 
@@ -215,6 +223,7 @@ impl Pathfinder {
         loop {
             let mut motionless_count = 0;
             let jdo = self.step();
+            assert!(step_count < 10);
             if step_count % 100 == 0 {
                 // eprintln!("J:{:?}",jdo);
                 // eprintln!("Step:{:?}",step_count);

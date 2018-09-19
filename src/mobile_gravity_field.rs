@@ -7,6 +7,7 @@ use rayon::prelude::*;
 
 use io::Parameters;
 
+use cluster::Cluster;
 use single_pathfinder::Pathfinder;
 use distance;
 use length;
@@ -43,9 +44,9 @@ impl GravityField {
 
 
 
-    pub fn fuzzy_fit(&mut self) -> Array<f64,Ix2> {
+    pub fn fuzzy_fit_mobile(&mut self) -> Array<f64,Ix2> {
 
-        let mut pathfinders: Vec<Pathfinder> = (0..self.samples).map(|i| Pathfinder::init(i,self.current_positions.as_ref().unwrap().clone(),self.parameters.clone())).collect();
+        let mut pathfinders: Vec<Pathfinder> = (0..self.samples).map(|i| Pathfinder::init(i,self.samples,self.features,self.parameters.clone())).collect();
 
         let mut moving_points = pathfinders.len();
 
@@ -55,27 +56,28 @@ impl GravityField {
 
             eprintln!("Starting");
 
+            let mut current_positions = self.current_positions.take().unwrap();
+
             let stepped_positions: Vec<Option<(Array<f64,Ix1>,f64)>> =
                 pathfinders
-                .iter()
-                // .par_iter()
+                // .iter()
+                .par_iter()
                 .map(|pathfinder| {
-                    pathfinder.step()
+                    pathfinder.step(current_positions.clone())
                 })
                 .collect();
 
             eprintln!("Stepped");
 
-            let mut final_positions: Arc<Array<f64,Ix2>> = self.current_positions.take().unwrap();
-
             for (i,(mut position,new_position_option)) in
-                Arc::make_mut(&mut final_positions)
+                Arc::get_mut(&mut current_positions)
+                .unwrap()
                 .outer_iter_mut()
-                .zip(stepped_positions.iter())
+                .zip(stepped_positions.into_iter())
                 .enumerate() {
                     if let Some((new_position,fuzz)) = new_position_option {
-                        position.assign(new_position);
-                        self.fuzz[i] = *fuzz;
+                        position.assign(&new_position);
+                        self.fuzz[i] = fuzz;
                     }
                     else {
                         moving_points -= 1;
@@ -83,10 +85,10 @@ impl GravityField {
             }
 
             for pathfinder in pathfinders.iter_mut() {
-                pathfinder.set_points(final_positions.clone());
+                pathfinder.memorize_step(None,current_positions.clone());
             }
 
-            self.current_positions = Some(final_positions);
+            self.current_positions = Some(current_positions);
 
             eprintln!("Finished: {}", moving_points);
 
@@ -97,9 +99,27 @@ impl GravityField {
 
     }
 
+    pub fn fuzzy_fit_single(&mut self) -> Array<f64,Ix2> {
+
+        let mut current_positions = self.initial_positions.clone();
+        let shared_positions = Arc::new(current_positions);
+        let mut final_positions = Array::zeros((self.samples,self.features));
+
+        for sample in 0..self.samples {
+            let pathfinder = Pathfinder::init(sample, self.samples,self.features, self.parameters.clone());
+
+
+
+
+        }
+
+        final_positions
+
+    }
+
     pub fn fuzzy_predict(&mut self) -> Array<usize,Ix1> {
 
-        let mut predictions = Array::zeros(self.current_positions.as_ref().unwrap().shape()[0]);
+        let mut predictions = Array::zeros(self.samples);
 
         self.cluster_points();
 
@@ -124,7 +144,7 @@ impl GravityField {
 
         if let Some(first_cluster_ind) = first_cluster_candidate {
 
-            let first_cluster = Cluster::init(1,final_positions.row(first_cluster_ind),first_cluster_ind);
+            let first_cluster = Cluster::init(1,final_positions.clone(),first_cluster_ind);
 
             self.clusters.push(first_cluster);
 
@@ -137,7 +157,7 @@ impl GravityField {
                     let point = final_positions.row(point_index);
 
                     for cluster in self.clusters.iter_mut() {
-                        if distance(point,cluster.center.view()) < cluster.radius(final_positions,&self.fuzz) * 10. {
+                        if distance(point,cluster.center.view()) < cluster.radius + self.fuzz[point_index] {
                         // if distance(point,cluster.center.view()) < self.parameters.scaling_factor.unwrap_or(0.1) * self.parameters.convergence_factor.unwrap_or(5.){
                             // eprintln!("ID:{:?}",cluster.id);
                             // eprintln!("CM:{:?}",distance(point,cluster.center.view()));
@@ -157,7 +177,7 @@ impl GravityField {
                 if moved_points.len() < 1 {
                     if let Some(new_cluster_point) = self.best_cluster_candidate(Some(&available_points)) {
                         available_points.remove(&new_cluster_point);
-                        let new_cluster = Cluster::init(self.clusters.len()+1, final_positions.row(new_cluster_point), new_cluster_point);
+                        let new_cluster = Cluster::init(self.clusters.len()+1, final_positions.clone(), new_cluster_point);
                         self.clusters.push(new_cluster);
                     }
                     else {
@@ -192,16 +212,13 @@ impl GravityField {
 
 
                 let c1 = &clusters[i];
-                let c1r = c1.radius(&final_positions,&self.fuzz);
 
                 'j_loop: for j in 0..clusters.len() {
                     if i != j {
 
                         let c2 = &clusters[j];
 
-                        let c2r = c2.radius(&final_positions,&self.fuzz);
-
-                        if distance(c1.center.view(),c2.center.view()) < (c1r + c2r) * 3. {
+                        if distance(c1.center.view(),c2.center.view()) < (c1.radius + c2.radius) * 3. {
                             new_cluster = Some(c1.merge_cluster(c2));
                             removed_clusters = Some((i,j));
                             eprintln!("Merged:{:?}",removed_clusters);
@@ -259,60 +276,4 @@ impl GravityField {
     //     for cluster in kk
     //     array
     // }
-}
-
-#[derive(Clone)]
-pub struct Cluster {
-    pub id: usize,
-    weight: usize,
-    center: Array<f64,Ix1>,
-    members: Vec<usize>,
-    // array: Array<f64,Ix2>
-}
-
-impl Cluster {
-    pub fn init(id: usize, point: ArrayView<f64,Ix1>, point_id: usize) -> Cluster {
-        let mut array = Array::zeros((1,point.shape()[0]));
-        array.row_mut(0).assign(&point);
-        Cluster {
-            id: id,
-            weight: 1,
-            center: point.to_owned(),
-            members: vec![point_id],
-            // array: array,
-
-        }
-    }
-
-    pub fn merge_cluster(&self,cluster: &Cluster) -> Cluster {
-        let new_weight = self.weight + cluster.weight;
-        let new_center = ((&self.center * self.weight as f64) + (&cluster.center * cluster.weight as f64)) / (new_weight) as f64;
-        let new_members = [self.members.iter(),cluster.members.iter()].iter().flat_map(|x| x.clone()).cloned().collect();
-        Cluster {
-            id : self.id,
-            weight: new_weight,
-            center: new_center,
-            members: new_members,
-        }
-    }
-
-    pub fn merge_point(&mut self ,point: ArrayView<f64,Ix1>, point_id:usize) -> usize {
-
-        self.center *= self.weight as f64/(self.weight as f64 + 1.);
-        self.center.scaled_add(1./(self.weight as f64 + 1.), &point);
-        self.weight += 1;
-        self.members.push(point_id);
-        // self.array = stack!(Axis(0),self.array, point.to_owned().insert_axis(Axis(1)).t());
-        self.id
-    }
-
-    pub fn radius(&self,array:&Arc<Array<f64,Ix2>>,fuzz:&Array<f64,Ix1>) -> f64 {
-        if self.members.len() == 1 {
-            return fuzz[self.members[0]];
-        }
-        let radius = self.members.iter().map(|x| length((&array.row(*x) - &self.center).view())).sum::<f64>() / self.weight as f64;
-        // eprintln!("R:{:?}",radius);
-        radius
-    }
-
 }

@@ -16,7 +16,7 @@ pub struct Pathfinder {
     samples: usize,
     sample_indecies: Vec<usize>,
     features: usize,
-    points: Arc<Array<f64,Ix2>>,
+    // points: Arc<Array<f64,Ix2>>,
     sample_subsamples: Vec<usize>,
     previous_steps: VecDeque<Array<f64,Ix1>>,
     parameters: Arc<Parameters>,
@@ -24,10 +24,7 @@ pub struct Pathfinder {
 
 impl Pathfinder {
     // pub fn init(origin: ArrayView<'a,f64,Ix1>, gravity_points: Arc<Array<f64,Ix2>>, skip: usize, scaling_factor:Option<f64>, subsample_arg: Option<usize>, convergence_arg: Option<f64>,locality: Option<f64>) -> Pathfinder {
-    pub fn init(id: usize, points: Arc<Array<f64,Ix2>>, parameters: Arc<Parameters>) -> Pathfinder {
-
-        let samples = points.shape()[0];
-        let features = points.shape()[1];
+    pub fn init(id: usize, samples: usize,features: usize, parameters: Arc<Parameters>) -> Pathfinder {
 
         let mut sample_indecies: Vec<usize> = (0..samples).collect();
         sample_indecies.remove(id);
@@ -48,41 +45,48 @@ impl Pathfinder {
         //     panic!();
         // }
 
-        eprintln!("INITIALIZED");
+        // eprintln!("INITIALIZED");
 
         Pathfinder {
             id: id,
             samples: samples,
             sample_indecies: sample_indecies,
             features: features,
-            points: points,
+            // points: points,
             sample_subsamples: sample_subsamples,
-            previous_steps: VecDeque::with_capacity(50),
+            previous_steps: VecDeque::with_capacity(51),
             parameters: parameters,
         }
 
     }
 
-    fn point(&self) -> Array<f64,Ix1> {
-        self.points.row(self.id).to_owned()
+    fn point(&self,points:Arc<Array<f64,Ix2>>) -> Array<f64,Ix1> {
+        points.row(self.id).to_owned()
     }
 
-    fn point_view<'a>(&'a self) -> ArrayView<'a,f64,Ix1> {
-        self.points.row(self.id)
+    fn point_view<'a>(&'a self,points:&'a Arc<Array<f64,Ix2>>) -> ArrayView<'a,f64,Ix1> {
+        points.row(self.id)
     }
 
-    pub fn set_points(&mut self,new_points:Arc<Array<f64,Ix2>>) {
-        if !self.converged() {
-            let current_point = self.point();
-            self.previous_steps.push_front(current_point);
-            if self.previous_steps.len() > 50 {
-                self.previous_steps.pop_back();
+    pub fn memorize_step(&mut self,point_option: Option<Array<f64,Ix1>>,points:Arc<Array<f64,Ix2>>) {
+        if !self.converged(points.clone()) {
+            if let Some(point) = point_option {
+                self.previous_steps.push_front(point);
+                if self.previous_steps.len() > 50 {
+                    self.previous_steps.pop_back();
+                }
             }
-            self.points = new_points;
+            else {
+                let current_point = self.point(points);
+                self.previous_steps.push_front(current_point);
+                if self.previous_steps.len() > 50 {
+                    self.previous_steps.pop_back();
+                }
+            }
         }
     }
 
-    fn subsampled_nearest(&self) -> Option<(Array<f64,Ix1>,f64)> {
+    fn subsampled_nearest(&self,points:Arc<Array<f64,Ix2>>) -> Option<(Array<f64,Ix1>,f64)> {
 
         // eprintln!("SS:{:?}",self.sample_subsamples);
 
@@ -94,32 +98,38 @@ impl Pathfinder {
             // eprintln!("P:{:?}",self.point.view());
             // eprintln!("S1:{:?}",self.points.row(*sub_point_index).view());
             // eprintln!("D:{:?}",distance(self.point.view(),self.points.row(*sub_point_index).view()));
-            let point_distance = distance(self.point_view(),self.points.row(sub_point_index).view());
+            let point_distance = distance(self.point_view(&points),points.row(sub_point_index).view());
             if (point_distance < maximum_jump_distance) && point_distance > 0. {
                 maximum_jump_distance = point_distance;
                 jump_point = Some(sub_point_index);
             }
         }
 
-        jump_point.map(|x| (self.points.row(x).to_owned(),maximum_jump_distance))
+        jump_point.map(|x| (points.row(x).to_owned(),maximum_jump_distance))
 
     }
 
-    fn subsampled_nearest_n(&self,n: usize) -> Vec<(Array<f64,Ix1>,f64)> {
+    fn subsampled_nearest_n(&self,n: usize,points:Arc<Array<f64,Ix2>>) -> Vec<(Array<f64,Ix1>,f64)> {
+
+        self.subsampled_nearest_n_to(self.point_view(&points),n,points)
+
+    }
+
+    fn subsampled_nearest_n_to(&self,center: ArrayView<f64,Ix1>,n: usize,points:Arc<Array<f64,Ix2>>) -> Vec<(Array<f64,Ix1>,f64)> {
 
         let mut sub_points: Vec<(Array<f64,Ix1>,f64)> = Vec::with_capacity(n+1);
 
         let sample_subsamples = sample_indices(&mut thread_rng(), self.samples, self.parameters.sample_subsample.unwrap_or(self.samples));
 
         if let Some(first_index) = sample_subsamples.get(0) {
-            let first_subsample = self.points.row(*first_index);
-            sub_points.push((first_subsample.to_owned(),distance(self.point_view(), first_subsample.view())));
+            let first_subsample = points.row(*first_index);
+            sub_points.push((first_subsample.to_owned(),distance(center, first_subsample.view())));
         }
 
         for sub_point_index in sample_subsamples {
 
-            let sub_point = self.points.row(sub_point_index);
-            let sub_point_distance = distance(self.point_view(),sub_point.view());
+            let sub_point = points.row(sub_point_index);
+            let sub_point_distance = distance(center,sub_point.view());
 
             let mut insert_index = None;
 
@@ -143,9 +153,16 @@ impl Pathfinder {
     }
 
 
-    pub fn step(&self) -> Option<(Array<f64,Ix1>,f64)> {
 
-        if self.converged() {
+    pub fn step(&self,points:Arc<Array<f64,Ix2>>) -> Option<(Array<f64,Ix1>,f64)> {
+
+        self.step_from(self.point_view(&points),points)
+
+    }
+
+    pub fn step_from(&self,point: ArrayView<f64,Ix1>,points:Arc<Array<f64,Ix2>>) -> Option<(Array<f64,Ix1>,f64)> {
+
+        if self.converged(points.clone()) {
             return None
         }
 
@@ -157,7 +174,7 @@ impl Pathfinder {
         // let mut total_distance = 0.;
         let mut bag_counter = 0;
 
-        for (bagged_point,_jump_distance) in self.subsampled_nearest_n(smoothing) {
+        for (bagged_point,_jump_distance) in self.subsampled_nearest_n(smoothing,points.clone()) {
             jump_point += &bagged_point;
             bag_counter += 1;
         };
@@ -166,21 +183,10 @@ impl Pathfinder {
         if bag_counter > 0 {
 
             jump_point /= bag_counter as f64;
-            // let mean_distance = total_distance / bag_counter as f64;
 
-            jump_point = (jump_point * 0.3) + (&self.point() * 0.7);
+            jump_point = (jump_point * 0.1) + (&self.point(points.clone()) * 0.9);
 
-            // eprintln!("J:{:?}",jump_point);
-
-            let jump_distance = distance(jump_point.view(),self.point_view());
-
-            // if jump_distance == 0. {
-            //     // eprintln!("P:{:?}",self.point);
-            //     // eprintln!("J:{:?}",jump_point);
-            //     // eprintln!("MD:{:?}",mean_distance);
-            //     // eprintln!("JD:{:?}",jump_distance);
-            //     panic!()
-            // }
+            let jump_distance = distance(jump_point.view(),self.point_view(&points));
 
             return Some((jump_point,jump_distance))
         }
@@ -188,13 +194,57 @@ impl Pathfinder {
         None
     }
 
-    fn converged(&self) -> bool {
+    pub fn single_descend(&mut self,points:Arc<Array<f64,Ix2>>) -> Array<f64,Ix1> {
+
+        let mut point = self.point(points);
+
+        while let Some((step,distance)) = self.step_from(point.view(),points) {
+            point = step;
+            self.memorize_step(Some(point.clone()),points);
+        }
+
+        self.previous_steps.clear();
+
+        point
+
+    }
+
+    pub fn fuzzy_descend(&self,fuzz:usize,points:Arc<Array<f64,Ix2>>) -> (Array<f64,Ix1>,(f64,f64)) {
+
+        let mut final_points: Array<f64,Ix2> = Array::zeros((fuzz,self.features));
+
+        for i in 0..fuzz {
+            final_points.row_mut(i).assign(&self.single_descend(points));
+        }
+
+        let average_point = final_points.sum_axis(Axis(0))/fuzz as f64;
+
+        // eprintln!("Average:{:?}",average_point);
+
+        let mut av_deviation = 0.;
+
+        for mut final_point in final_points.outer_iter_mut() {
+            final_point.scaled_add(-1.,&average_point);
+            av_deviation += length(final_point.view())/fuzz as f64;
+        }
+
+        eprintln!("Deviation:{:?}",av_deviation);
+
+        let displacement = length((&self.origin - &average_point).view());
+
+        eprintln!("Displacement:{:?}",displacement);
+
+        (average_point,(av_deviation,displacement))
+
+    }
+
+    fn converged(&self,points:Arc<Array<f64,Ix2>>) -> bool {
         if self.previous_steps.len() < 50 {
             return false
         }
         let distant_point = self.previous_steps.back().unwrap().view();
         let previous_point = self.previous_steps.front().unwrap().view();
-        let current_point = self.point_view();
+        let current_point = self.point_view(&points);
         let short_displacement = distance(previous_point,current_point);
         let long_displacement = distance(distant_point,current_point);
         long_displacement < (short_displacement * self.parameters.convergence_factor.unwrap_or(3.))

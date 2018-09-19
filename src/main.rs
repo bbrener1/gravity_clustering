@@ -1,4 +1,3 @@
-
 use std::env;
 
 extern crate rand;
@@ -14,12 +13,13 @@ mod nearest_pathfinder;
 mod io;
 mod mobile_gravity_field;
 mod single_pathfinder;
+mod nearest_gravity_field;
+mod cluster;
 use io::{write_array,write_vector};
 use mobile_gravity_field::GravityField;
 use io::{Parameters,Command};
 use ndarray::{Array,Axis,Ix1,Zip,ArrayView};
 use std::sync::Arc;
-
 use std::io::Error;
 
 
@@ -78,17 +78,18 @@ fn main() -> Result<(),Error> {
             Ok(())
         },
         Command::Fuzzy => {
-            let mut final_positions = field.fuzzy_fit();
+            let mut final_positions = field.fuzzy_fit_mobile();
             let mut predictions = field.fuzzy_predict();
 
             if parameters.refining {
+
                 let mut refining_parameters = Arc::make_mut(&mut parameters).clone();
 
                 refining_parameters.scaling_factor = refining_parameters.scaling_factor.map(|x| x/5.);
 
                 let mut refining_field = GravityField::init(final_positions,Arc::new(refining_parameters));
 
-                final_positions = refining_field.fuzzy_fit();
+                final_positions = refining_field.fuzzy_fit_mobile();
                 predictions = refining_field.fuzzy_predict();
 
                 field = refining_field;
@@ -114,6 +115,13 @@ pub fn distance(pa1:ArrayView<f64,Ix1>,pa2:ArrayView<f64,Ix1>) -> f64 {
     Zip::from(pa1).and(pa2).apply(|p1,p2| acc += (*p1 - *p2).powi(2));
     acc = acc.sqrt();
     acc
+}
+
+pub fn cos_similarity(pa1:ArrayView<f64,Ix1>,pa2:ArrayView<f64,Ix1>) -> f64 {
+    let product_sum = (&pa1 * &pa2).scalar_sum();
+    let p1ss = pa1.map(|x| x.powi(2)).scalar_sum().sqrt();
+    let p2ss = pa2.map(|x| x.powi(2)).scalar_sum().sqrt();
+    product_sum / (p1ss * p2ss)
 }
 
 pub fn sq_distance(pa1:ArrayView<f64,Ix1>,pa2:ArrayView<f64,Ix1>) -> f64 {
