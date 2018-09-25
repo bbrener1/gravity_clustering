@@ -8,10 +8,10 @@ use std::collections::HashMap;
 use num_cpus;
 use std::f64;
 use std::fmt::Debug;
+use rayon::iter::IntoParallelIterator;
 
 
-
-use ndarray::{Array,Ix1,Ix2};
+use ndarray::{Array,ArrayView,Ix1,Ix2};
 
 #[derive(Debug,Clone)]
 pub struct Parameters {
@@ -31,6 +31,7 @@ pub struct Parameters {
     pub locality: Option<f64>,
     pub refining: bool,
     pub smoothing: Option<usize>,
+    pub distance: Option<Distance>,
 
     count_array_file: String,
     feature_header_file: Option<String>,
@@ -54,6 +55,7 @@ impl Parameters {
             sample_names: None,
             report_address: None,
             dump_error: None,
+            distance: None,
 
             processor_limit: None,
 
@@ -145,7 +147,11 @@ impl Parameters {
                 },
                 "-r" | "-refining" => {
                     arg_struct.refining = true;
+                },
+                "-d" | "-distance" => {
+                    arg_struct.distance = Some(args.next().map(|x| Distance::parse(&x)).expect("Distance parse error"))
                 }
+
                 &_ => {
                     panic!("Not a valid argument: {}", arg);
                 }
@@ -220,6 +226,9 @@ impl Parameters {
 
     }
 
+    pub fn distance(&self, p1:ArrayView<f64,Ix1>,p2:ArrayView<f64,Ix1>) -> f64 {
+        self.distance.as_ref().unwrap_or(&Distance::Cosine).measure(p1,p2)
+    }
 
 }
 
@@ -382,6 +391,44 @@ fn read_standard_in() -> Array<f64,Ix2> {
 
 }
 
+#[derive(Debug,Clone,Copy)]
+pub enum Distance {
+    Manhattan,
+    Euclidean,
+    Cosine,
+}
+
+impl Distance {
+    pub fn parse(argument: &str) -> Distance {
+        match &argument[..] {
+            "manhattan" | "m" | "cityblock" => Distance::Manhattan,
+            "euclidean" | "e" => Distance::Euclidean,
+            "cosine" | "c" | "cos" => Distance::Cosine,
+            _ => {
+                eprintln!("Not a valid distance option, defaulting to cosine");
+                Distance::Cosine
+            }
+        }
+    }
+
+    pub fn measure(&self,p1:ArrayView<f64,Ix1>,p2:ArrayView<f64,Ix1>) -> f64 {
+        match self {
+            Distance::Manhattan => {
+                (&p1 - &p2).scalar_sum()
+            },
+            Distance::Euclidean => {
+                (&p1 - &p2).map(|x| x.powi(2)).scalar_sum().sqrt()
+            },
+            Distance::Cosine => {
+                let dot_product = p1.dot(&p2);
+                let p1ss = p1.map(|x| x.powi(2)).scalar_sum().sqrt();
+                let p2ss = p2.map(|x| x.powi(2)).scalar_sum().sqrt();
+                1.0 - (dot_product / (p1ss * p2ss))
+            }
+        }
+    }
+}
+
 
 #[derive(Debug,Clone)]
 pub enum Command {
@@ -389,6 +436,7 @@ pub enum Command {
     Predict,
     FitPredict,
     Fuzzy,
+    Mobile,
 }
 
 impl Command {
@@ -400,8 +448,9 @@ impl Command {
             "predict" => Command::Predict,
             "fitpredict" | "fit_predict" | "combined" => Command::FitPredict,
             "fuzzy_predict" | "fuzzy" => Command::Fuzzy,
+            "mobile" => Command::Mobile,
             _ =>{
-                println!("Not a valid top-level command, please choose from \"fit\",\"predict\", or \"fitpredict\". Exiting");
+                eprintln!("Not a valid top-level command, please choose from \"fit\",\"predict\", or \"fitpredict\". Exiting");
                 panic!()
             }
         }

@@ -1,4 +1,8 @@
 use std::env;
+use std::io::Write;
+use std::fs::File;
+use std::fs::OpenOptions;
+
 
 extern crate rand;
 extern crate num_cpus;
@@ -78,7 +82,7 @@ fn main() -> Result<(),Error> {
             Ok(())
         },
         Command::Fuzzy => {
-            let mut final_positions = field.fuzzy_fit_mobile();
+            let mut final_positions = field.fuzzy_fit_single();
             let mut predictions = field.fuzzy_predict();
 
             if parameters.refining {
@@ -89,7 +93,7 @@ fn main() -> Result<(),Error> {
 
                 let mut refining_field = GravityField::init(final_positions,Arc::new(refining_parameters));
 
-                final_positions = refining_field.fuzzy_fit_mobile();
+                final_positions = refining_field.fuzzy_fit_single();
                 predictions = refining_field.fuzzy_predict();
 
                 field = refining_field;
@@ -101,6 +105,21 @@ fn main() -> Result<(),Error> {
             }
             Ok(())
         },
+        Command::Mobile => {
+            let mut final_positions = field.fuzzy_fit_mobile();
+            let mut predictions = field.fuzzy_predict();
+
+            write_vector(predictions, &parameters.report_address)?;
+            if parameters.dump_error.is_some() {
+                write_array(final_positions, &parameters.dump_error.clone().map(|x| [x,"final_pos.tsv".to_string()].join("")))?;
+                let mut cluster_file = OpenOptions::new().create(true).append(true).open([parameters.dump_error.as_ref().unwrap(),"clusters.tsv"].join("")).unwrap();
+                for cluster in field.clusters {
+                    cluster_file.write(format!("{:?}",cluster.center()).as_bytes())?;
+                }
+            }
+
+            Ok(())
+        }
 
     }
 

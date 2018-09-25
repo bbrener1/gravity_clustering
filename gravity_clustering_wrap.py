@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import io
 import argparse
-
+from time import sleep
 import subprocess as sp
 
 import numpy as np
@@ -15,7 +15,7 @@ def main():
     counts = np.loadtxt(sys.argv[1])
     fit_predict(counts,scaling=.1,sample_sub=10)
 
-def fit_predict(targets,feature_sub=None,sample_sub=None,scaling=None,merge_distance=None,refining=False,error_dump=None,convergence_factor=None,smoothing=None,locality=None):
+def fit_predict(targets,command,feature_sub=None,distance=None,sample_sub=None,scaling=None,merge_distance=None,refining=False,error_dump=None,convergence_factor=None,smoothing=None,locality=None):
 
     # np.array(targets)
 
@@ -31,7 +31,7 @@ def fit_predict(targets,feature_sub=None,sample_sub=None,scaling=None,merge_dist
 
     print("Running " + str(path_to_rust))
 
-    arg_list = [str(path_to_rust),"fuzzy_predict"]
+    arg_list = [str(path_to_rust),command]
     arg_list.extend(["-stdin"])
     arg_list.extend(["-stdout"])
     if sample_sub is not None:
@@ -50,12 +50,19 @@ def fit_predict(targets,feature_sub=None,sample_sub=None,scaling=None,merge_dist
         arg_list.extend(["-l",str(locality)])
     if smoothing is not None:
         arg_list.extend(["-smoothing",str(smoothing)])
+    if distance is not None:
+        arg_list.extend(["-d",str(distance)])
     if refining:
         arg_list.extend(["-refining"])
 
     print("Command: " + " ".join(arg_list))
 
     cp = sp.run(arg_list,input=targets,stdout=sp.PIPE,stderr=sp.PIPE,universal_newlines=True)
+
+    while cp.returncode is None:
+        cp.poll()
+        sleep(1)
+        print(cp.stderr.read())
 
     print(cp.stderr)
 
