@@ -14,7 +14,7 @@ use std::cmp::Ordering;
 use ndarray::{Array,ArrayView,Ix1,Ix2};
 use ndarray_linalg::*;
 
-use rulinalg::matrix::{Matrix,BaseMatrix,BaseMatrixMut,Axes};
+// use rulinalg::matrix::{Matrix,BaseMatrix,BaseMatrixMut,Axes};
 
 #[derive(Debug,Clone)]
 pub struct Parameters {

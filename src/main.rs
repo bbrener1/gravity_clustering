@@ -12,7 +12,7 @@ extern crate ndarray;
 extern crate ndarray_linalg;
 // extern crate ndarray_parallel;
 extern crate rayon;
-extern crate rulinalg;
+// extern crate rulinalg;
 
 mod io;
 mod mobile_gravity_field;
