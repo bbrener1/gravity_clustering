@@ -5,7 +5,8 @@ authors = ["boris"]
 
 [dependencies]
 ndarray = "0.12"
-ndarray-linalg= "0.10"
+ndarray-linalg = { version = "0.10", features = ["openblas"] }
+# ndarray-linalg = "0.10"
 rand = "0.5.5"
 num_cpus = "1.8.0"
 # rulinalg="0.4.2"

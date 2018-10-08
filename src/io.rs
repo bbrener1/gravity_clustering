@@ -400,7 +400,12 @@ pub fn pca(input: Array<f64,Ix2>,pc_lim:usize) -> (Array<f64,Ix2>,Array<f64,Ix2>
         // let order = argsort(&(0..input.shape()[0]).map(|i| sig[i]).collect());
         let eigenvectors: Array<f64,Ix2> = v.slice(s![.. , 0..pc_lim]).to_owned();
         let scores: Array<f64,Ix2> = (u * sig).slice(s![ .. , 0..pc_lim]).to_owned();
+
+        eprintln!("PCA Was Performed, retaining {} PCs", pc_lim);
+        eprintln!("{:?},{:?}",scores.shape(),eigenvectors.shape());
+
         (scores,eigenvectors)
+
     }
 
     else {
