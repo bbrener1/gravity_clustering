@@ -9,9 +9,12 @@ use num_cpus;
 use std::f64;
 use std::fmt::Debug;
 use rayon::iter::IntoParallelIterator;
-
+use std::cmp::Ordering;
 
 use ndarray::{Array,ArrayView,Ix1,Ix2};
+use ndarray_linalg::*;
+
+use rulinalg::matrix::{Matrix,BaseMatrix,BaseMatrixMut,Axes};
 
 #[derive(Debug,Clone)]
 pub struct Parameters {
@@ -341,7 +344,7 @@ fn read_counts(location:&str) -> Array<f64,Ix2> {
     println!("===========");
     println!("{},{}", array.shape()[0], array.shape()[1]);
 
-    array
+    pca(array,50).0
 
 }
 
@@ -387,8 +390,74 @@ fn read_standard_in() -> Array<f64,Ix2> {
 
     let array = Array::from_shape_vec((samples,counts.len()/samples),counts).unwrap_or(Array::zeros((0,0)));
 
-    array
+    pca(array,50).0
+}
 
+pub fn pca(input: Array<f64,Ix2>,pc_lim:usize) -> (Array<f64,Ix2>,Array<f64,Ix2>) {
+
+
+    if let Ok((Some(u),sig,Some(v))) = input.svd(true,true) {
+        // let order = argsort(&(0..input.shape()[0]).map(|i| sig[i]).collect());
+        let eigenvectors: Array<f64,Ix2> = v.slice(s![.. , 0..pc_lim]).to_owned();
+        let scores: Array<f64,Ix2> = (u * sig).slice(s![ .. , 0..pc_lim]).to_owned();
+        (scores,eigenvectors)
+    }
+
+    else {
+        let shape = (input.shape()[0],input.shape()[1]);
+        eprintln!("WARNING, SVD FAILED, ATTEMPTING CLUSTERING ON WHOLE MATRIX");
+        (input,Array::zeros(shape))
+    }
+
+    // let mut rla_mtx: Matrix<f64> = Matrix::new(input.shape()[0],input.shape()[1],input.iter().cloned().collect::<Vec<f64>>());
+    // let means: Matrix<f64> = Matrix::from(rla_mtx.mean(Axes::Row)).transpose();
+    // let variances: Matrix<f64> = Matrix::from(rla_mtx.variance(Axes::Row).unwrap()).transpose();
+    // // eprintln!("{:?}",(rla_mtx.rows(),rla_mtx.cols()));
+    // // eprintln!("{:?}",(variances.rows(),variances.cols()));
+    // // eprintln!("{:?}",(means.rows(),means.cols()));
+    //
+    // for row in rla_mtx.row_iter_mut() {
+    //     // eprintln!("{:?}",(row.rows(),row.cols()));
+    //     let centered = &*row - &means;
+    //     // eprintln!("{:?}",(centered.rows(),centered.cols()));
+    //     let standardized = centered.elediv(&variances);
+    //     // eprintln!("{:?}",(standardized.rows(),standardized.cols()));
+    //     row.set_to(standardized);
+    // }
+    //
+    // eprintln!("Covariance?");
+    //
+    // let cov =  (&rla_mtx.transpose() * &rla_mtx) * (1./ (rla_mtx.rows() - 1) as f64);
+    //
+    // eprintln!("Covariance established");
+    //
+    // if let Ok((eigenvalues,eigenvectors_col)) = cov.eigendecomp() {
+    //     let mut order = argsort(&eigenvalues);
+    //     order.truncate(pc_lim);
+    //     let pcs: Matrix<f64> = Matrix::new(pc_lim,eigenvectors_col.rows(), order.into_iter().flat_map(|x| eigenvectors_col.col(x).iter().cloned()).collect::<Vec<f64>>());
+    //     let pcs_col = pcs.transpose();
+    //     let transformed = rla_mtx * pcs_col;
+    //
+    //     let pcs_array: Array<f64,Ix2> = Array::from_shape_vec((pcs.rows(),pcs.cols()),pcs.into_vec()).unwrap();
+    //     let transformed_array: Array<f64,Ix2> = Array::from_shape_vec((transformed.rows(),transformed.cols()),transformed.into_vec()).unwrap();
+    //
+    //     (transformed_array,pcs_array)
+    // }
+    // else {
+    //     let shape = (input.shape()[0],input.shape()[1]);
+    //     (input,Array::zeros((shape.0,shape.1)))
+    // }
+
+
+}
+
+fn argsort(input: &Vec<f64>) -> Vec<usize> {
+    let mut intermediate1 = input.iter().enumerate().collect::<Vec<(usize,&f64)>>();
+    intermediate1.sort_unstable_by(|a,b| a.1.partial_cmp(b.1).unwrap_or(Ordering::Greater));
+    let mut intermediate2 = intermediate1.iter().enumerate().collect::<Vec<(usize,&(usize,&f64))>>();
+    intermediate2.sort_unstable_by(|a,b| ((a.1).0).cmp(&(b.1).0));
+    let out = intermediate2.iter().map(|x| x.0).collect();
+    out
 }
 
 #[derive(Debug,Clone,Copy)]

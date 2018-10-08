@@ -6,7 +6,7 @@ use rand::{Rng,ThreadRng,thread_rng};
 use rand::seq::sample_indices;
 use std::cmp::{min,max};
 use io::Parameters;
-use ndarray_parallel::prelude::*;
+// use ndarray_parallel::prelude::*;
 use length;
 use io::Distance;
 
@@ -23,6 +23,7 @@ pub struct Pathfinder {
     distance: Distance,
     smoothing: usize,
     convergence: f64,
+    converged: bool,
 }
 
 impl Pathfinder {
@@ -62,6 +63,7 @@ impl Pathfinder {
             smoothing: parameters.smoothing.unwrap_or(5),
             distance: parameters.distance.unwrap_or(Distance::Cosine),
             convergence: parameters.convergence_factor.unwrap_or(1.),
+            converged: false,
         }
 
     }
@@ -76,6 +78,7 @@ impl Pathfinder {
 
     pub fn memorize_step(&mut self,point_option: Option<Array<f64,Ix1>>,points:&Arc<Array<f64,Ix2>>) {
         if !self.converged(points) {
+            // eprintln!("PO:{:?}", point_option);
             if let Some(point) = point_option {
                 self.previous_steps.push_front(point);
                 if self.previous_steps.len() > 50 {
@@ -83,13 +86,14 @@ impl Pathfinder {
                 }
             }
             else {
-                let current_point = self.point(points);
-                self.previous_steps.push_front(current_point);
-                if self.previous_steps.len() > 50 {
-                    self.previous_steps.pop_back();
-                }
+                // let current_point = self.point(points);
+                // self.previous_steps.push_front(current_point);
+                // if self.previous_steps.len() > 50 {
+                //     self.previous_steps.pop_back();
+                // }
             }
         }
+        // eprintln!("ST:{:?}", self.previous_steps);
     }
 
     fn subsampled_nearest(&self,points:Arc<Array<f64,Ix2>>) -> Option<(Array<f64,Ix1>,f64)> {
@@ -168,7 +172,7 @@ impl Pathfinder {
 
     pub fn step_from(&self,point: ArrayView<f64,Ix1>,points:&Arc<Array<f64,Ix2>>) -> Option<(Array<f64,Ix1>,f64)> {
 
-        if self.converged(points) {
+        if self.converged {
             return None
         }
 
@@ -215,11 +219,14 @@ impl Pathfinder {
             self.memorize_step(Some(point.clone()),points);
             // step_counter += 1;
             // if step_counter%10 == 0 {
-            //     eprintln!("S:{:?}",step_counter);
+                // eprintln!("S:{:?}",step_counter);
             // }
         }
 
+        // eprintln!("Steps:{:?}", self.previous_steps);
+
         self.previous_steps.clear();
+        self.converged = false;
 
         point
 
@@ -252,28 +259,47 @@ impl Pathfinder {
 
         eprintln!("Displacement:{:?}",displacement);
 
+        // eprintln!("Steps:{:?}", self.previous_steps);
+
         (average_point,(av_deviation,displacement))
 
     }
 
-    fn converged(&self,points:&Arc<Array<f64,Ix2>>) -> bool {
+    fn converged(&mut self,points:&Arc<Array<f64,Ix2>>) -> bool {
         if self.previous_steps.len() < 50 {
             return false
         }
+        if self.converged {
+            return true
+        }
         let distant_point = self.previous_steps.back().unwrap().view();
         let previous_point = self.previous_steps.front().unwrap().view();
-        let current_point = self.point_view(&points);
-        let short_displacement = self.distance.measure(previous_point,current_point);
-        let long_displacement = self.distance.measure(distant_point,current_point);
+        let current_point = self.point(&points);
+        let short_displacement = self.distance.measure(previous_point,current_point.view());
+        let long_displacement = self.distance.measure(distant_point,current_point.view());
         // eprintln!("SD:{:?}",short_displacement);
         // eprintln!("LD:{:?}",long_displacement);
-        long_displacement < (short_displacement * self.convergence)
+        if long_displacement < (short_displacement * self.convergence) {
+            self.converged = true;
+            return true
+        }
+        else {
+            return false
+        }
     }
 
     pub fn fuzz(&self) -> f64 {
         let distant_point = self.previous_steps.back().unwrap().view();
         let previous_point = self.previous_steps.front().unwrap().view();
         self.distance.measure(distant_point,previous_point)
+    }
+
+    pub fn sub_fuzz(&self,fuzz: usize,points:Arc<Array<f64,Ix2>>) -> f64 {
+        let mut acc = 0.;
+        for (point,_jump_distance) in self.subsampled_nearest_n(fuzz, points.clone()) {
+            acc += self.distance.measure(self.point_view(&points), point.view()) / fuzz as f64;
+        }
+        acc
     }
 
 }

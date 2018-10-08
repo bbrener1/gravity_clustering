@@ -54,6 +54,8 @@ impl GravityField {
 
         let mut moving_points = pathfinders.len();
 
+        let mut step_counter = 0;
+
         while moving_points > 0 {
 
             moving_points = pathfinders.len();
@@ -79,9 +81,8 @@ impl GravityField {
                 .outer_iter_mut()
                 .zip(stepped_positions.into_iter())
                 .enumerate() {
-                    if let Some((new_position,fuzz)) = new_position_option {
+                    if let Some((new_position,step_length)) = new_position_option {
                         position.assign(&new_position);
-                        self.fuzz[i] = fuzz;
                     }
                     else {
                         moving_points -= 1;
@@ -92,14 +93,20 @@ impl GravityField {
                 pathfinder.memorize_step(None,&current_positions.clone());
             }
 
-            self.current_positions = Some(current_positions);
+            self.current_positions = Some(current_positions.clone());
 
             eprintln!("Finished: {}", moving_points);
+
+            step_counter += 1;
+
+            if step_counter > 2000 {
+                break
+            }
 
         }
 
         for (i,pathfinder) in pathfinders.iter().enumerate() {
-            self.fuzz[i] = pathfinder.fuzz();
+            self.fuzz[i] = pathfinder.sub_fuzz(10,self.current_positions.as_ref().unwrap().clone());
         }
 
         Arc::get_mut(self.current_positions.as_mut().unwrap()).unwrap().clone()
@@ -128,6 +135,9 @@ impl GravityField {
             self.fuzz[i] = deviation
         }
 
+        // eprintln!("{:?}",shared_positions.row(0));
+        // eprintln!("{:?}",final_positions.row(0));
+
         self.current_positions = Some(Arc::new(final_positions.clone()));
 
         final_positions
@@ -140,7 +150,7 @@ impl GravityField {
 
         self.cluster_points();
 
-        self.merge_clusters();
+        // self.merge_clusters();
 
         for cluster in &self.clusters {
             for point in &cluster.members {
@@ -190,6 +200,11 @@ impl GravityField {
 
                     let best_cluster_option = distances_to_clusters.iter().min_by(|x,y| x.1.partial_cmp(&y.1).unwrap_or(Ordering::Greater));
 
+                    // eprintln!("PP:{:?}",point);
+                    // eprintln!("FF:{:?}",self.fuzz[point_index]);
+                    // eprintln!("BCO:{:?}", best_cluster_option);
+                    // eprintln!("BCR:{:?}",self.clusters[best_cluster_option.unwrap().0].radius);
+
                     if let Some((best_cluster_index,distance_to_cluster)) = best_cluster_option {
                         let best_cluster: &mut Cluster = &mut self.clusters[*best_cluster_index];
                         // eprintln!("Try");
@@ -200,11 +215,13 @@ impl GravityField {
                         // eprintln!("CC:{:?}",best_cluster.center);
                         // eprintln!("PC:{:?}",point);
 
-                        if *distance_to_cluster < (best_cluster.radius * 2.) + self.fuzz[point_index] {
+                        // if *distance_to_cluster < (best_cluster.radius + self.fuzz[point_index]) * 2. {
+                        if *distance_to_cluster < (best_cluster.radius + self.fuzz[point_index]) {
                             moved_points.push(point_index);
                             best_cluster.merge_point(point,point_index);
                             // eprintln!("ID:{:?}",best_cluster.id);
                             // eprintln!("FF:{:?}",self.fuzz[point_index]);
+                            // eprintln!("CR:{:?}",best_cluster.radius);
                             // eprintln!("CM:{:?}",distance_to_cluster);
                             // eprintln!("DS:{:?}",displacement);
                             // eprintln!("CC:{:?}",best_cluster.center);
@@ -272,15 +289,15 @@ impl GravityField {
                         //     eprintln!("Distance:{:?}",self.parameters.distance.unwrap_or(Distance::Cosine).measure(c1.center.view(),c2.center.view()));
                         // }
 
-                        if self.distance.measure(c1.center.view(),c2.center.view()) < (c1.radius + c2.radius) {
+                        if self.distance.measure(c1.center.view(),c2.center.view()) < (c1.radius.sqrt() + c2.radius.sqrt()).powi(2) {
                             merge_candidates = Some((i,j));
-                            eprintln!("C1:{:?}",c1.center);
-                            eprintln!("C2:{:?}",c2.center);
-                            eprintln!("R1:{:?}",c1.radius);
-                            eprintln!("R2:{:?}",c2.radius);
-                            eprintln!("W1:{:?}",c1.weight);
-                            eprintln!("W2:{:?}",c2.weight);
-                            eprintln!("Merging:{:?}",merge_candidates);
+                            // eprintln!("C1:{:?}",c1.center);
+                            // eprintln!("C2:{:?}",c2.center);
+                            // eprintln!("R1:{:?}",c1.radius);
+                            // eprintln!("R2:{:?}",c2.radius);
+                            // eprintln!("W1:{:?}",c1.weight);
+                            // eprintln!("W2:{:?}",c2.weight);
+                            // eprintln!("Merging:{:?}",merge_candidates);
                             break 'i_loop;
                         }
                     }
@@ -290,8 +307,8 @@ impl GravityField {
 
             if let Some((c1i,c2i)) = merge_candidates {
                 let new_cluster = clusters[c1i].merge_cluster(&clusters[c2i]);
-                eprintln!("N:{:?}",new_cluster.center);
-                eprintln!("N:{:?}",new_cluster.radius);
+                // eprintln!("N:{:?}",new_cluster.center);
+                // eprintln!("N:{:?}",new_cluster.radius);
                 clusters[c1i] = new_cluster;
                 clusters.remove(c2i);
             }

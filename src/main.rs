@@ -9,15 +9,14 @@ extern crate num_cpus;
 
 #[macro_use]
 extern crate ndarray;
-extern crate ndarray_parallel;
+extern crate ndarray_linalg;
+// extern crate ndarray_parallel;
 extern crate rayon;
+extern crate rulinalg;
 
-mod pathfinder;
-mod nearest_pathfinder;
 mod io;
 mod mobile_gravity_field;
 mod single_pathfinder;
-mod nearest_gravity_field;
 mod cluster;
 use io::{write_array,write_vector};
 use mobile_gravity_field::GravityField;

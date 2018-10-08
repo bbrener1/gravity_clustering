@@ -1,0 +1,16 @@
+#!/usr/bin/expect
+
+set timeout 100
+
+spawn scp bbrener1@comp2:~/op_johnston/johnston_retina/quantification/stringtie/*.tsv /cache/track-hubs/bc/sarah/
+expect {
+    "(yes/no)?"
+        {
+            send "yes\n"
+            expect "*assword:" { send "Magictg!8\n"}
+        }
+    "*assword:"
+        {
+            send "Magictg!8\n"
+        }
+    }
