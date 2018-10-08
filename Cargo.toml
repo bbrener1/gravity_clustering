@@ -4,9 +4,9 @@ version = "0.1.0"
 authors = ["boris"]
 
 [dependencies]
-ndarray = "0.11.0"
+ndarray = "0.12"
+ndarray-linalg= "0.10"
 rand = "0.5.5"
 num_cpus = "1.8.0"
-rulinalg="0.4.2"
-ndarray-parallel = "0.8.0"
+# rulinalg="0.4.2"
 rayon = "1.0.2"
