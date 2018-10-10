@@ -447,7 +447,9 @@ pub fn borrow(input: Array<f64,Ix2>, distance:&Distance) -> Array<f64,Ix2> {
 
     // let smoothed:Array<f64,Ix2> = cov.dot(&input.t()).reversed_axes();
 
-    let borrowed = Array::from_shape_vec((input.rows(),input.cols()), similairty.dot(&input.t()).t().iter().cloned().collect()).unwrap();
+    let borrowed = Array::from_shape_vec((input.rows(),input.cols()), similairty.dot(&standardized.t()).t().iter().cloned().collect()).unwrap();
+
+    // let borrowed = Array::from_shape_vec((input.rows(),input.cols()), similairty.dot(&input.t()).t().iter().cloned().collect()).unwrap();
 
     eprintln!("Smoothed:{:?}",borrowed.shape());
 
@@ -614,12 +616,8 @@ pub fn cosine_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
     geo.mapv_inplace(f64::sqrt);
     for i in 0..slice.rows() {
         for j in 0..slice.rows() {
-            products[[i,j]] /= (&geo[i] * &geo[j]);
-            // if !products[[i,j]].is_finite() {
-            //     products[[i,j]] = 0.;
-            // }
+            products[[i,j]] /= (&geo[i] * &geo[j])
         }
-
     }
     for i in 0..slice.rows() {
         products[[i,i]] = 1.;
