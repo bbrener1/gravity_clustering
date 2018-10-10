@@ -431,15 +431,15 @@ pub fn borrow(input: Array<f64,Ix2>, distance:&Distance) -> Array<f64,Ix2> {
     eprintln!("Covariance?");
 
     let standardized = standardize(&input);
-    let similairty = standardized.t().dot(&standardized);
-    // let similairty = match distance {
-    //     Distance::Euclidean => {
-    //         let standardized = standardize(&input);
-    //         standardized.t().dot(&standardized)
-    //     },
-    //     Distance::Cosine => cosine_similarity_matrix(input.t()),
-    //     _ => euclidean_similarity_matrix(input.view().t()),
-    // } ;
+    // let similairty = standardized.t().dot(&standardized);
+    let similairty = match distance {
+        Distance::Euclidean => {
+            let standardized = standardize(&input);
+            standardized.t().dot(&standardized)
+        },
+        Distance::Cosine => cosine_similarity_matrix(input.t()),
+        _ => euclidean_similarity_matrix(input.view().t()),
+    } ;
 
     eprintln!("{:?}",(similairty.rows(),similairty.cols()));
 
