@@ -428,17 +428,19 @@ pub fn borrow(input: Array<f64,Ix2>, distance:&Distance) -> Array<f64,Ix2> {
 
     // eprintln!("{:?}", rla_mtx);
 
-    let standardized = standardize(&input);
-
     eprintln!("Covariance?");
 
-    // let cov =  (&rla_mtx.transpose() * &rla_mtx) * (1./ (rla_mtx.rows() - 1) as f64);
-    let similairty = match distance {
-        Distance::Euclidean => standardized.t().dot(&standardized),
-        Distance::Cosine => cosine_similarity_matrix(input.t()),
-        _ => euclidean_similarity_matrix(input.view().t()),
-    } ;
-    //
+    let standardized = standardize(&input);
+    let similairty = standardized.t().dot(&standardized);
+    // let similairty = match distance {
+    //     Distance::Euclidean => {
+    //         let standardized = standardize(&input);
+    //         standardized.t().dot(&standardized)
+    //     },
+    //     Distance::Cosine => cosine_similarity_matrix(input.t()),
+    //     _ => euclidean_similarity_matrix(input.view().t()),
+    // } ;
+
     eprintln!("{:?}",(similairty.rows(),similairty.cols()));
 
     eprintln!("Covariance established");
@@ -591,17 +593,33 @@ pub fn standardize(input: &Array<f64,Ix2>) -> Array<f64,Ix2> {
 
 }
 
+pub fn sanitize(mut input: Array<f64,Ix2>) -> Array<f64,Ix2> {
+    for ref mut feature in input.axis_iter_mut(Axis(1)) {
+        if feature.iter().sum::<f64>() == 0. {
+            feature.fill(1.)
+        }
+    };
+    input
+}
+
 
 pub fn cosine_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
     let mut products = slice.dot(&slice.t());
     eprintln!("Products");
     let mut geo = (&slice * &slice).sum_axis(Axis(1));
+    if geo.iter().any(|x| *x == 0.) {
+        panic!("Unsanitized input, detected an all-0 feature (column), please use a different distance metric, or sanitize your input");
+    }
     eprintln!("geo");
     geo.mapv_inplace(f64::sqrt);
     for i in 0..slice.rows() {
         for j in 0..slice.rows() {
-            products[[i,j]] /= (&geo[i] * &geo[j])
+            products[[i,j]] /= (&geo[i] * &geo[j]);
+            // if !products[[i,j]].is_finite() {
+            //     products[[i,j]] = 0.;
+            // }
         }
+
     }
     for i in 0..slice.rows() {
         products[[i,i]] = 1.;
@@ -619,7 +637,7 @@ pub fn euclidean_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> 
     for i in 0..slice.rows() {
         for j in 0..slice.rows() {
             products[[i,j]] = 1.0 / (&geo[i] + &geo[j] - 2.0 * products[[i,j]]).sqrt();
-            if products[[i,j]].is_infinite() {
+            if !products[[i,j]].is_finite() {
                 products[[i,j]] = 1.0;
             }
         }
