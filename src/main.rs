@@ -9,10 +9,10 @@ extern crate num_cpus;
 
 #[macro_use]
 extern crate ndarray;
-extern crate ndarray_linalg;
+// extern crate ndarray_linalg;
 // extern crate ndarray_parallel;
 extern crate rayon;
-// extern crate rulinalg;
+extern crate rulinalg;
 
 mod io;
 mod mobile_gravity_field;
@@ -21,10 +21,11 @@ mod cluster;
 use io::{write_array,write_vector};
 use mobile_gravity_field::GravityField;
 use io::{Parameters,Command};
-use ndarray::{Array,Axis,Ix1,Zip,ArrayView};
+use ndarray::{Array,Axis,Ix1,Ix2,Zip,ArrayView};
 use std::sync::Arc;
 use std::io::Error;
-
+use io::borrow;
+use io::standardize;
 
 fn main() -> Result<(),Error> {
 
@@ -36,7 +37,15 @@ fn main() -> Result<(),Error> {
 
     let mut parameters_raw = Parameters::read(&mut arg_iter);
 
-    let gravity_points = parameters_raw.counts.take().unwrap();
+    let mut gravity_points = parameters_raw.counts.take().unwrap();
+
+    if parameters_raw.standardize {
+        gravity_points = standardize(&gravity_points);
+    }
+
+    for _ in 0..*parameters_raw.borrow.as_ref().unwrap_or(&0)  {
+        gravity_points = borrow(gravity_points,parameters_raw.distance.as_ref().unwrap());
+    }
 
     let mut parameters = Arc::new(parameters_raw);
 

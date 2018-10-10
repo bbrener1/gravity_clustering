@@ -212,15 +212,15 @@ impl Pathfinder {
     pub fn single_descend(&mut self,points:&Arc<Array<f64,Ix2>>) -> Array<f64,Ix1> {
 
         let mut point = self.point(points);
-        // let mut step_counter = 0;
+        let mut step_counter = 0;
 
         while let Some((step,distance)) = self.step_from(point.view(),points) {
             point = step;
             self.memorize_step(Some(point.clone()),points);
-            // step_counter += 1;
-            // if step_counter%10 == 0 {
+            step_counter += 1;
+            if step_counter%10 == 0 {
                 // eprintln!("S:{:?}",step_counter);
-            // }
+            }
         }
 
         // eprintln!("Steps:{:?}", self.previous_steps);

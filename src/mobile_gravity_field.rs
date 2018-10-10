@@ -29,11 +29,15 @@ pub struct GravityField {
 impl GravityField {
 
     pub fn init(gravity_points: Array<f64,Ix2>, parameters:Arc<Parameters>) -> GravityField {
+
+        eprintln!("Initializing:{:?}", gravity_points.shape());
+
         assert!(!gravity_points.iter().any(|x| x.is_nan()));
         let samples = gravity_points.shape()[0];
         let features = gravity_points.shape()[1];
         let current_positions = Some(Arc::new(gravity_points.clone()));
         let fuzz = Array::zeros(samples);
+
         GravityField {
             samples: samples,
             features: features,
@@ -116,6 +120,8 @@ impl GravityField {
 
     pub fn fuzzy_fit_single(&mut self) -> Array<f64,Ix2> {
 
+        eprintln!("Starting a fuzzy fit:");
+
         let shared_positions = Arc::new(self.initial_positions.clone());
         let mut final_positions = Array::zeros((self.samples,self.features));
 
@@ -126,6 +132,7 @@ impl GravityField {
                 // if sample > 10 {
                 //     panic!()
                 // };
+                // eprintln!("{:?}",shared_positions.row(sample));
                 let mut pathfinder = Pathfinder::init(sample, self.samples,self.features, self.parameters.clone());
                 pathfinder.fuzzy_descend(10,shared_positions.clone())
             }).collect();

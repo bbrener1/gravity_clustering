@@ -11,10 +11,10 @@ use std::fmt::Debug;
 use rayon::iter::IntoParallelIterator;
 use std::cmp::Ordering;
 
-use ndarray::{Array,ArrayView,Ix1,Ix2};
-use ndarray_linalg::*;
+use ndarray::{Array,ArrayView,Ix1,Ix2,Axis};
+// use ndarray_linalg::*;
 
-// use rulinalg::matrix::{Matrix,BaseMatrix,BaseMatrixMut,Axes};
+use rulinalg::matrix::{Matrix,BaseMatrix,BaseMatrixMut,Axes};
 
 #[derive(Debug,Clone)]
 pub struct Parameters {
@@ -35,6 +35,8 @@ pub struct Parameters {
     pub refining: bool,
     pub smoothing: Option<usize>,
     pub distance: Option<Distance>,
+    pub borrow: Option<usize>,
+    pub standardize: bool,
 
     count_array_file: String,
     feature_header_file: Option<String>,
@@ -59,6 +61,8 @@ impl Parameters {
             report_address: None,
             dump_error: None,
             distance: None,
+            borrow: None,
+            standardize: false,
 
             processor_limit: None,
 
@@ -128,6 +132,9 @@ impl Parameters {
                 },
                 "-ss" | "-sample_sub" => {
                     arg_struct.sample_subsample = Some(args.next().expect("Error processing sample subsample arg").parse::<usize>().expect("Error sample subsample arg"));
+                    if arg_struct.sample_subsample.as_ref().unwrap_or(&0) > &(arg_struct.counts.as_ref().unwrap_or(&Array::zeros((0,0))).shape()[0]) {
+                        panic!("Subsamples cannot be greater than samples")
+                    }
                 },
                 "-scaling" | "-step" | "-sf" | "-scaling_factor" => {
                     arg_struct.scaling_factor = Some(args.next().map(|x| x.parse::<f64>()).expect("Scaling factor parse error. Not a number?").expect("Iteration error"));
@@ -142,7 +149,13 @@ impl Parameters {
                     arg_struct.convergence_factor = Some(args.next().map(|x| x.parse::<f64>()).expect("Convergence distance parse error. Not a number?").expect("Iteration error"));
                 },
                 "-smoothing" => {
-                    arg_struct.smoothing = Some(args.next().map(|x| x.parse::<usize>()).expect("Smoothing distance parse error. Not a number?").expect("Iteration error"));
+                    arg_struct.smoothing = Some(args.next().map(|x| x.parse::<usize>()).expect("Smoothing parse error. Not a number?").expect("Iteration error"));
+                },
+                "-borrow" => {
+                    arg_struct.borrow = Some(args.next().map(|x| x.parse::<usize>()).expect("Borrowing parse error. Not a number?").expect("Iteration error"));
+                },
+                "-standardize" => {
+                    arg_struct.standardize = true;
                 },
 
                 "-l" | "-locality" => {
@@ -344,8 +357,7 @@ fn read_counts(location:&str) -> Array<f64,Ix2> {
     println!("===========");
     println!("{},{}", array.shape()[0], array.shape()[1]);
 
-    pca(array,50).0
-
+    array
 }
 
 fn read_standard_in() -> Array<f64,Ix2> {
@@ -390,71 +402,236 @@ fn read_standard_in() -> Array<f64,Ix2> {
 
     let array = Array::from_shape_vec((samples,counts.len()/samples),counts).unwrap_or(Array::zeros((0,0)));
 
-    pca(array,50).0
+    array
 }
 
-pub fn pca(input: Array<f64,Ix2>,pc_lim:usize) -> (Array<f64,Ix2>,Array<f64,Ix2>) {
+pub fn borrow(input: Array<f64,Ix2>, distance:&Distance) -> Array<f64,Ix2> {
 
 
-    if let Ok((Some(u),sig,Some(v))) = input.svd(true,true) {
-        // let order = argsort(&(0..input.shape()[0]).map(|i| sig[i]).collect());
-        let eigenvectors: Array<f64,Ix2> = v.slice(s![.. , 0..pc_lim]).to_owned();
-        let scores: Array<f64,Ix2> = (u * sig).slice(s![ .. , 0..pc_lim]).to_owned();
-
-        eprintln!("PCA Was Performed, retaining {} PCs", pc_lim);
-        eprintln!("{:?},{:?}",scores.shape(),eigenvectors.shape());
-
-        (scores,eigenvectors)
-
-    }
-
-    else {
-        let shape = (input.shape()[0],input.shape()[1]);
-        eprintln!("WARNING, SVD FAILED, ATTEMPTING CLUSTERING ON WHOLE MATRIX");
-        (input,Array::zeros(shape))
-    }
-
-    // let mut rla_mtx: Matrix<f64> = Matrix::new(input.shape()[0],input.shape()[1],input.iter().cloned().collect::<Vec<f64>>());
-    // let means: Matrix<f64> = Matrix::from(rla_mtx.mean(Axes::Row)).transpose();
-    // let variances: Matrix<f64> = Matrix::from(rla_mtx.variance(Axes::Row).unwrap()).transpose();
-    // // eprintln!("{:?}",(rla_mtx.rows(),rla_mtx.cols()));
-    // // eprintln!("{:?}",(variances.rows(),variances.cols()));
-    // // eprintln!("{:?}",(means.rows(),means.cols()));
+    // let mut means = input.mean_axis(Axis(0));
+    // let mut variances = input.var_axis(Axis(0),0.);
     //
-    // for row in rla_mtx.row_iter_mut() {
-    //     // eprintln!("{:?}",(row.rows(),row.cols()));
-    //     let centered = &*row - &means;
-    //     // eprintln!("{:?}",(centered.rows(),centered.cols()));
-    //     let standardized = centered.elediv(&variances);
-    //     // eprintln!("{:?}",(standardized.rows(),standardized.cols()));
-    //     row.set_to(standardized);
+    // for i in 0..input.shape()[0] {
+    //     let mut row = input.slice_mut(s![i,..]);
+    //     // eprintln!("{:?}",row);
+    //     let centered = &row - &means;
+    //     // eprintln!("{:?}",centered);
+    //     let mut standardized = centered * &variances;
+    //     for v in standardized.iter_mut() {
+    //         if !v.is_finite() {
+    //             *v = 0.;
+    //         }
+    //     }
+    //     // eprintln!("{:?}",standardized);
+    //     row.assign(&standardized);
     // }
-    //
-    // eprintln!("Covariance?");
-    //
+
+    // eprintln!("{:?}", rla_mtx);
+
+    let standardized = standardize(&input);
+
+    eprintln!("Covariance?");
+
     // let cov =  (&rla_mtx.transpose() * &rla_mtx) * (1./ (rla_mtx.rows() - 1) as f64);
+    let similairty = match distance {
+        Distance::Euclidean => standardized.t().dot(&standardized),
+        Distance::Cosine => cosine_similarity_matrix(input.view()),
+        _ => euclidean_similarity_matrix(input.view()),
+    } ;
     //
-    // eprintln!("Covariance established");
+    eprintln!("{:?}",(similairty.rows(),similairty.cols()));
+
+    eprintln!("Covariance established");
+
+    // let smoothed:Array<f64,Ix2> = cov.dot(&input.t()).reversed_axes();
+
+    let borrowed = Array::from_shape_vec((input.rows(),input.cols()), similairty.dot(&input.t()).t().iter().cloned().collect()).unwrap();
+
+    eprintln!("Smoothed:{:?}",borrowed.shape());
+
+    borrowed
+
+}
+
+//
+// pub fn pca(mut input: Array<f64,Ix2>,pc_lim:usize) -> (Array<f64,Ix2>,Array<f64,Ix2>) {
+//
+//     eprintln!("PCA by means of SVD");
+//     eprintln!("{:?}",input.shape());
+//     eprintln!("Keeping {:?}",pc_lim);
+//
+    // eprintln!("{:?}", input);
     //
-    // if let Ok((eigenvalues,eigenvectors_col)) = cov.eigendecomp() {
-    //     let mut order = argsort(&eigenvalues);
-    //     order.truncate(pc_lim);
-    //     let pcs: Matrix<f64> = Matrix::new(pc_lim,eigenvectors_col.rows(), order.into_iter().flat_map(|x| eigenvectors_col.col(x).iter().cloned()).collect::<Vec<f64>>());
-    //     let pcs_col = pcs.transpose();
-    //     let transformed = rla_mtx * pcs_col;
+    // if let Ok((Some(u),sig,Some(v))) = input.clone().svd(true,true) {
+    //     // let order = argsort(&(0..input.shape()[0]).map(|i| sig[i]).collect());
+    //     let mut diagonal: Array<f64,Ix2> = Array::zeros((u.shape()[1],u.shape()[1]));
+    //     for (i,sv) in sig.iter().enumerate() {
+    //         eprintln!("{:?}",sv);
+    //         diagonal[[i,i]] = *sv;
+    //     }
+    //     let eigenvectors: Array<f64,Ix2> = v.slice(s![.. , 0..pc_lim]).t().to_owned();
+    //     let scores: Array<f64,Ix2> = (u * diagonal).slice(s![ .. , 0..pc_lim]).to_owned();
     //
-    //     let pcs_array: Array<f64,Ix2> = Array::from_shape_vec((pcs.rows(),pcs.cols()),pcs.into_vec()).unwrap();
-    //     let transformed_array: Array<f64,Ix2> = Array::from_shape_vec((transformed.rows(),transformed.cols()),transformed.into_vec()).unwrap();
+    //     eprintln!("PCA Was Performed, retaining {} PCs", pc_lim);
+    //     eprintln!("{:?},{:?}",scores.shape(),eigenvectors.shape());
+    //     eprintln!("{:?}",scores.slice(s![..10,..]));
     //
-    //     (transformed_array,pcs_array)
+    //     (scores,eigenvectors)
+    //
     // }
+    //
     // else {
     //     let shape = (input.shape()[0],input.shape()[1]);
-    //     (input,Array::zeros((shape.0,shape.1)))
-    // }
+    //     eprintln!("WARNING, SVD FAILED, ATTEMPTING CLUSTERING ON WHOLE MATRIX");
+    //     (input,Array::zeros(shape))
+    // // }
 
+//     let mut rla_mtx: Matrix<f64> = Matrix::new(input.shape()[0],input.shape()[1],input.iter().cloned().collect::<Vec<f64>>());
+//
+//     let mut means: Matrix<f64> = Matrix::from(rla_mtx.mean(Axes::Row)).transpose();
+//     let mut variances: Matrix<f64> = Matrix::from(rla_mtx.variance(Axes::Row).unwrap()).transpose();
+//
+//     let mut masked: Vec<usize> = variances.iter().enumerate().filter(|x| *x.1 == 0.).map(|x| x.0).collect();
+//
+//     for column in &masked {
+//         rla_mtx = rla_mtx.sub_slice([0,0],rla_mtx.rows(),*column).into_matrix().hcat(&rla_mtx.sub_slice([0,column+1],rla_mtx.rows(),rla_mtx.cols()-column-1).into_matrix());
+//         means = means.sub_slice([0,0],means.rows(),*column).into_matrix().hcat(&means.sub_slice([0,column+1],means.rows(),means.cols()-column-1).into_matrix());
+//         variances = variances.sub_slice([0,0],variances.rows(),*column).into_matrix().hcat(&variances.sub_slice([0,column+1],variances.rows(),variances.cols()-column-1).into_matrix());
+//     }
+//
+//     eprintln!("Masked {}",masked.len());
+//     eprintln!("{:?}",(rla_mtx.rows(),rla_mtx.cols()));
+//
+//
+//     eprintln!("{:?}",variances);
+//     eprintln!("{:?}",means);
+//
+//     for row in rla_mtx.row_iter_mut() {
+//         // eprintln!("{:?}",row);
+//         let centered = &*row - &means;
+//         // eprintln!("{:?}",centered);
+//         let mut standardized = centered.elediv(&variances);
+//         for v in standardized.iter_mut() {
+//             if !v.is_finite() {
+//                 *v = 0.;
+//             }
+//         }
+//         // eprintln!("{:?}",standardized);
+//         row.set_to(standardized);
+//     }
+//
+//     // eprintln!("{:?}", rla_mtx);
+//
+//     eprintln!("Covariance?");
+//
+//     // let cov =  (&rla_mtx.transpose() * &rla_mtx) * (1./ (rla_mtx.rows() - 1) as f64);
+//     let cov =  &rla_mtx.transpose() * &rla_mtx;
+//     //
+//     eprintln!("{:?}",(cov.rows(),cov.cols()));
+//
+//     eprintln!("Covariance established");
+//
+//     // cov.clone().eigendecomp().unwrap();
+//
+//     if let Ok((eigenvalues,eigenvectors_col)) = cov.eigendecomp() {
+//         eprintln!("{:?}",eigenvalues);
+//         // eprintln!("{:?}", (eigenvectors_col.rows(),eigenvectors_col.cols()));
+//         let mut order = argsort(&eigenvalues);
+//         order.truncate(pc_lim);
+//         // eprintln!("Attempting {},{}",pc_lim, eigenvectors_col.rows());
+//         // eprintln!("{}",order.len());
+//         let pcs: Matrix<f64> = Matrix::new(order.len(),eigenvectors_col.rows(), order.into_iter().flat_map(|x| eigenvectors_col.col(x).iter().cloned()).collect::<Vec<f64>>());
+//         let pcs_col = pcs.transpose();
+//         let transformed = rla_mtx * pcs_col;
+//
+//         let pcs_array: Array<f64,Ix2> = Array::from_shape_vec((pcs.rows(),pcs.cols()),pcs.into_vec()).unwrap();
+//         let transformed_array: Array<f64,Ix2> = Array::from_shape_vec((transformed.rows(),transformed.cols()),transformed.into_vec()).unwrap();
+//
+//         eprintln!("Returning PCA");
+//
+//         eprintln!("{:?}",transformed_array.shape());
+//         eprintln!("{:?}",pcs_array.shape());
+//
+//         (transformed_array,pcs_array)
+//     }
+//     else {
+//
+//         eprintln!("FAILED EIGENDECOMPOSITION");
+//         panic!();
+//
+//         let shape = (input.shape()[0],input.shape()[1]);
+//         (input,Array::zeros((shape.0,shape.1)))
+//     }
+//
+//
+// }
+
+pub fn standardize(input: &Array<f64,Ix2>) -> Array<f64,Ix2> {
+    let mut means = input.mean_axis(Axis(0));
+    let mut variances = input.var_axis(Axis(0),0.);
+
+    let mut standardized = input.clone();
+
+    for i in 0..standardized.shape()[0] {
+        let mut row = standardized.slice_mut(s![i,..]);
+        // eprintln!("{:?}",row);
+        let centered_row = &row - &means;
+        // eprintln!("{:?}",centered);
+        let mut standardized_row = centered_row * &variances;
+        for v in standardized_row.iter_mut() {
+            if !v.is_finite() {
+                *v = 0.;
+            }
+        }
+        // eprintln!("{:?}",standardized);
+        row.assign(&standardized_row);
+    }
+
+    standardized
 
 }
+
+
+pub fn cosine_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
+    let mut products = slice.dot(&slice.t());
+    eprintln!("Products");
+    let mut geo = (&slice * &slice).sum_axis(Axis(1));
+    eprintln!("geo");
+    geo.mapv_inplace(f64::sqrt);
+    for i in 0..slice.rows() {
+        for j in 0..slice.rows() {
+            products[[i,j]] /= (&geo[i] * &geo[j])
+        }
+    }
+    for i in 0..slice.rows() {
+        products[[i,i]] = 1.;
+    }
+    products
+}
+
+
+pub fn euclidean_similarity_matrix(slice: ArrayView<f64,Ix2>) -> Array<f64,Ix2> {
+    let mut products = slice.dot(&slice.t());
+    eprintln!("Products");
+    let mut geo = (&slice * &slice).sum_axis(Axis(1));
+    eprintln!("geo");
+
+    for i in 0..slice.rows() {
+        for j in 0..slice.rows() {
+            products[[i,j]] = 1.0 / (&geo[i] + &geo[j] - 2.0 * products[[i,j]]).sqrt();
+            if products[[i,j]].is_infinite() {
+                products[[i,j]] = 1.0;
+            }
+        }
+    }
+
+    for i in 0..slice.rows() {
+        products[[i,i]] = 1.0;
+    }
+
+    products
+}
+
 
 fn argsort(input: &Vec<f64>) -> Vec<usize> {
     let mut intermediate1 = input.iter().enumerate().collect::<Vec<(usize,&f64)>>();
