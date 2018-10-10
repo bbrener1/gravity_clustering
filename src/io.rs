@@ -435,8 +435,8 @@ pub fn borrow(input: Array<f64,Ix2>, distance:&Distance) -> Array<f64,Ix2> {
     // let cov =  (&rla_mtx.transpose() * &rla_mtx) * (1./ (rla_mtx.rows() - 1) as f64);
     let similairty = match distance {
         Distance::Euclidean => standardized.t().dot(&standardized),
-        Distance::Cosine => cosine_similarity_matrix(input.view()),
-        _ => euclidean_similarity_matrix(input.view()),
+        Distance::Cosine => cosine_similarity_matrix(input.t()),
+        _ => euclidean_similarity_matrix(input.view().t()),
     } ;
     //
     eprintln!("{:?}",(similairty.rows(),similairty.cols()));
