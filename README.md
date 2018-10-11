@@ -16,12 +16,15 @@ Subsampling is used to smooth out local maxima and to accelerate the computation
   
 #### Smoothing:
 
-  Intuitively, do your clusters have sharp edges? If you have highly overlapping clusters, increasing the locality to 3 or 4 may help to disentangle overlapping clusters. If you have "grainy" data, and are looking for larger-scale clusters, turn locality down to 2 (or even 1). 
-    
-#### Merge distance:
+  Intuitively, do your clusters have sharp edges? If you have highly overlapping clusters, increasing the smoothing to 3 or 4 may help to disentangle overlapping clusters. If you have "grainy" data, and are looking for larger-scale clusters, turn locality down to 2 (or even 1). 
 
-  You probably don't need to touch this, but this is the distance at which two points belong to the same cluster after they come to "rest" from descending into a gravity well.
+#### Borrowing
 
+Is your data both sparse and high dimensional? (like... more than 10 dimensional)
+Are many dimensions correlated? If so, borrowing can help you overcome the sparsity of your data, when you are not guaranteed to observe a key feature in a sample that would link it to the appropriate neighboring cluster. Borrowing is a numeric value, try 1 or maybe 2. 
+
+WARNING: Sanitizing your data becomes more important when you use borrowing, please make sure that you avoid any uniform features (eg avoid having all of one column being the same value, especially 0), and try to make sure all your features are linearly independent, (eg no column is a multiple of another column). 
+  
 #### Convergence: 
 
   Again, you probably don't need to mess with this, but this is the criteria for total displacement over 50 steps for which a point is considered to have "converged" 
