@@ -14,18 +14,17 @@ Subsampling is used to smooth out local maxima and to accelerate the computation
 
   Intuitively, roughly how many clusters do you expect to find? Subsampling rate of 1000 will find hundreds of clusters, but its going to be more aggressive about splitting larger clusters into smaller ones. A subsampling rate of 100 will find dozens of clusters, but be less aggressive. I do not recommend subsampling rates below 5. 
   
-#### Locality:
+#### Smoothing:
 
-  Intuitively, do your clusters have sharp edges? If you have highly overlapping clusters, increasing the locality to 3 or 4 may help to disentangle overlapping clusters. If you have "grainy" data, and are looking for larger-scale clusters, turn locality down to 2 (or even 1). 
+  Intuitively, do your clusters have sharp edges? If you have highly overlapping clusters, increasing the smoothing to 3 or 4 may help to disentangle overlapping clusters. If you have "grainy" data, and are looking for larger-scale clusters, turn locality down to 2 (or even 1). 
+
+#### Borrowing
+
+Is your data both sparse and high dimensional? (like... more than 10 dimensional)
+Are many dimensions correlated? If so, borrowing can help you overcome the sparsity of your data, when you are not guaranteed to observe a key feature in a sample that would link it to the appropriate neighboring cluster. Borrowing is a numeric value, try 1 or maybe 2. 
+
+WARNING: Sanitizing your data becomes more important when you use borrowing, please make sure that you avoid any uniform features (eg avoid having all of one column being the same value, especially 0), and try to make sure all your features are linearly independent, (eg no column is a multiple of another column). 
   
-#### Scaling:
-
-  Length of steps when data points are descending into a gravity well. If the magnitude of the values in your data is large, set scaling for a higher value, otherwise your data will take forever to converge. If the values in your data are small, set scaling for a smaller value. The more dimensions you have, the higher scaling should be. The rule of thumb should be (average value of a feature / 100) * number of dimensions. (In future I will set this automatically)
-  
-#### Merge distance:
-
-  You probably don't need to touch this, but this is the distance at which two points belong to the same cluster after they come to "rest" from descending into a gravity well.
-
 #### Convergence: 
 
   Again, you probably don't need to mess with this, but this is the criteria for total displacement over 50 steps for which a point is considered to have "converged" 
