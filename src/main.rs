@@ -12,7 +12,6 @@ extern crate ndarray;
 // extern crate ndarray_linalg;
 // extern crate ndarray_parallel;
 extern crate rayon;
-extern crate rulinalg;
 
 mod io;
 mod mobile_gravity_field;
@@ -44,7 +43,7 @@ fn main() -> Result<(),Error> {
     }
 
     for _ in 0..*parameters_raw.borrow.as_ref().unwrap_or(&0)  {
-        gravity_points = borrow(gravity_points,parameters_raw.distance.as_ref().unwrap());
+        gravity_points = borrow(gravity_points,parameters_raw.distance.as_ref().unwrap(),parameters_raw.verbose);
     }
 
     let mut parameters = Arc::new(parameters_raw);
@@ -61,32 +60,32 @@ fn main() -> Result<(),Error> {
             Ok(())
         }
         Command::FitPredict => {
-            // field.fit();
-            // let mut predictions = field.predict();
+            let mut final_positions = field.fit();
+            let mut predictions = field.fuzzy_predict();
 
-            // if parameters.refining {
-            //     let mut refining_parameters = Arc::make_mut(&mut parameters).clone();
-            //
-            //     let mut refining_field = GravityField::init(field.final_positions.unwrap(),Arc::new(refining_parameters));
-            //
-            //     refining_field.fit();
-            //     predictions = refining_field.predict();
-            //
-            //     field = refining_field;
-            // }
-            //
-            // write_vector(predictions, &parameters.report_address)?;
-            //
-            // if parameters.dump_error.is_some() {
-            //     write_array(field.final_positions.unwrap(), &parameters.dump_error.clone().map(|x| [x,"final_pos.tsv".to_string()].join("")))?;
-            //     // let clusters: Vec<Array<f64,Ix1>> = field.clusters.iter().map(|x| x.id).collect();
-            //     // let mut cluster_acc = Array::zeros((0,field.gravity_points.shape()[1]));
-            //     // for cluster in clusters {
-            //     //     cluster_acc = stack!(Axis(0),cluster_acc,cluster.insert_axis(Axis(1)).t());
-            //     // }
-            //     // // eprintln!("{:?}",cluster_acc.shape());
-            //     // write_array(cluster_acc, &parameters.dump_error.clone().map(|x| [x,"clusters.tsv".to_string()].join("")))?;
-            // }
+            if parameters.refining {
+                let mut refining_parameters = Arc::make_mut(&mut parameters).clone();
+
+                let mut refining_field = GravityField::init(final_positions.clone(),Arc::new(refining_parameters));
+
+                final_positions = refining_field.fit();
+                predictions = refining_field.fuzzy_predict();
+
+                field = refining_field;
+            }
+
+            write_vector(predictions, &parameters.report_address)?;
+
+            if parameters.dump_error.is_some() {
+                write_array(final_positions, &parameters.dump_error.clone().map(|x| [x,"final_pos.tsv".to_string()].join("")))?;
+                // let clusters: Vec<Array<f64,Ix1>> = field.clusters.iter().map(|x| x.id).collect();
+                // let mut cluster_acc = Array::zeros((0,field.gravity_points.shape()[1]));
+                // for cluster in clusters {
+                //     cluster_acc = stack!(Axis(0),cluster_acc,cluster.insert_axis(Axis(1)).t());
+                // }
+                // // eprintln!("{:?}",cluster_acc.shape());
+                // write_array(cluster_acc, &parameters.dump_error.clone().map(|x| [x,"clusters.tsv".to_string()].join("")))?;
+            }
             Ok(())
         },
         Command::Fuzzy => {

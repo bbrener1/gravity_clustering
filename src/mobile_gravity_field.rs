@@ -83,7 +83,7 @@ impl GravityField {
                 Arc::get_mut(&mut current_positions)
                 .unwrap()
                 .outer_iter_mut()
-                .zip(stepped_positions.into_iter())
+                .zip(stepped_positions.iter())
                 .enumerate() {
                     if let Some((new_position,step_length)) = new_position_option {
                         position.assign(&new_position);
@@ -93,8 +93,12 @@ impl GravityField {
                     }
             }
 
-            for pathfinder in pathfinders.iter_mut() {
-                pathfinder.memorize_step(None,&current_positions.clone());
+            // for pathfinder in pathfinders.iter_mut() {
+                // pathfinder.memorize_step(None,&current_positions.clone());
+            // }
+
+            for (pathfinder,step) in pathfinders.iter_mut().zip(stepped_positions) {
+                pathfinder.memorize_step(step)
             }
 
             self.current_positions = Some(current_positions.clone());
@@ -118,6 +122,39 @@ impl GravityField {
 
     }
 
+    pub fn fit(&mut self) -> Array<f64,Ix2> {
+
+        eprintln!("Starting a fuzzy fit:");
+
+        let shared_positions = Arc::new(self.initial_positions.clone());
+        let mut final_positions = Array::zeros((self.samples,self.features));
+
+        let position_vec: Vec<(Array<f64,Ix1>,f64)> = (0..self.samples)
+            // .into_iter()
+            .into_par_iter()
+            .map(|sample| {
+                if sample % 10 == 0 {
+                    eprintln!("s:{:?}", sample);
+                };
+                // eprintln!("{:?}",shared_positions.row(sample));
+                let mut pathfinder = Pathfinder::init(sample, self.samples,self.features, self.parameters.clone());
+                pathfinder.single_descend(&shared_positions)
+            }).collect();
+
+        for (i,(position,fuzz)) in position_vec.into_iter().enumerate() {
+            final_positions.row_mut(i).assign(&position);
+            self.fuzz[i] = fuzz * 10.
+        }
+
+        // eprintln!("{:?}",shared_positions.row(0));
+        // eprintln!("{:?}",final_positions.row(0));
+
+        self.current_positions = Some(Arc::new(final_positions.clone()));
+
+        final_positions
+
+    }
+
     pub fn fuzzy_fit_single(&mut self) -> Array<f64,Ix2> {
 
         eprintln!("Starting a fuzzy fit:");
@@ -129,12 +166,12 @@ impl GravityField {
             // .into_iter()
             .into_par_iter()
             .map(|sample| {
-                // if sample > 10 {
-                //     panic!()
-                // };
+                if sample % 10 == 0 {
+                    eprintln!("s:{:?}", sample);
+                };
                 // eprintln!("{:?}",shared_positions.row(sample));
                 let mut pathfinder = Pathfinder::init(sample, self.samples,self.features, self.parameters.clone());
-                pathfinder.fuzzy_descend(10,shared_positions.clone())
+                pathfinder.fuzzy_descend(self.parameters.fuzz,shared_positions.clone())
             }).collect();
 
         for (i,(position,(deviation,displacement))) in position_vec.into_iter().enumerate() {
@@ -167,6 +204,10 @@ impl GravityField {
 
         predictions
     }
+
+    // pub fn very_fuzzy_predict(&mut self) -> Array<usize,Ix1> {
+    //
+    // }
 
     pub fn cluster_points(&mut self) {
 
