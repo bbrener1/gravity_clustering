@@ -93,13 +93,13 @@ impl GravityField {
                     }
             }
 
-            // for pathfinder in pathfinders.iter_mut() {
-                // pathfinder.memorize_step(None,&current_positions.clone());
-            // }
-
-            for (pathfinder,step) in pathfinders.iter_mut().zip(stepped_positions) {
-                pathfinder.memorize_step(step)
+            for pathfinder in pathfinders.iter_mut() {
+                pathfinder.memorize_step(None,&current_positions.clone());
             }
+
+            // for (pathfinder,step) in pathfinders.iter_mut().zip(stepped_positions) {
+            //     pathfinder.memorize_step(step)
+            // }
 
             self.current_positions = Some(current_positions.clone());
 
@@ -174,7 +174,7 @@ impl GravityField {
                 pathfinder.fuzzy_descend(self.parameters.fuzz,shared_positions.clone())
             }).collect();
 
-        for (i,(position,(deviation,displacement))) in position_vec.into_iter().enumerate() {
+        for (i,(position,(deviation,_displacement))) in position_vec.into_iter().enumerate() {
             final_positions.row_mut(i).assign(&position);
             self.fuzz[i] = deviation
         }

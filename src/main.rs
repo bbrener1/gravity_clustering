@@ -48,6 +48,8 @@ fn main() -> Result<(),Error> {
 
     let mut parameters = Arc::new(parameters_raw);
 
+    eprintln!("Clustering with parameters:{:?}",parameters);
+
     let mut field = GravityField::init(gravity_points, parameters.clone());
 
     match parameters.command {

@@ -112,9 +112,13 @@ def fit_predict(targets,command,feature_sub=None,distance=None,verbose=False,sam
             # print(line.count(b's:'),flush=True)
         #     progress_counter += line.count(b's:')
         #     print(f"Points descended:{progress_counter}",flush=True)
+        # else:
         if not verbose:
             progress_counter += line.count(b's:')
-            print(f"Points descended:{progress_counter}",end="\r",flush=True)
+            if b"Clusters" not in line:
+                print(f"Points descended:{progress_counter}",end="\r",flush=True)
+            else:
+                print(str(line.strip), end='\r')
         # if line != b"":
         #     print(line)
         # else:

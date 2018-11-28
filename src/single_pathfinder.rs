@@ -19,13 +19,14 @@ pub struct Pathfinder {
     // points: Arc<Array<f64,Ix2>>,
     sample_subsample:usize,
     sample_subsamples: Vec<usize>,
-    // previous_steps: VecDeque<Array<f64,Ix1>>,
-    previous_steps: VecDeque<f64>,
+    previous_steps: VecDeque<Array<f64,Ix1>>,
+    // previous_steps: VecDeque<f64>,
     distance: Distance,
     smoothing: usize,
     convergence: f64,
     converged: bool,
     step_fraction: f64,
+    cached_distance_sums: Vec<f64>,
 }
 
 impl Pathfinder {
@@ -59,7 +60,7 @@ impl Pathfinder {
             sample_indecies: sample_indecies,
             features: features,
             // points: points,
-            sample_subsample: parameters.sample_subsample.unwrap_or(samples),
+            sample_subsample: subsample_size,
             sample_subsamples: sample_subsamples,
             previous_steps: VecDeque::with_capacity(51),
             smoothing: parameters.smoothing.unwrap_or(5),
@@ -67,6 +68,7 @@ impl Pathfinder {
             convergence: parameters.convergence_factor.unwrap_or(1.),
             converged: false,
             step_fraction: parameters.step_fraction.unwrap_or(0.3),
+            cached_distance_sums: vec![]
         }
 
     }
@@ -79,43 +81,43 @@ impl Pathfinder {
         points.row(self.id)
     }
 
-    // pub fn memorize_step(&mut self,point_option: Option<Array<f64,Ix1>>,points:&Arc<Array<f64,Ix2>>) {
-    //     if !self.converged(points) {
-    //         // eprintln!("PO:{:?}", point_option);
-    //         if let Some(point) = point_option {
-    //             self.previous_steps.push_front(point);
-    //             if self.previous_steps.len() > 50 {
-    //                 self.previous_steps.pop_back();
-    //             }
-    //         }
-    //         else {
-    //             // let current_point = self.point(points);
-    //             // self.previous_steps.push_front(current_point);
-    //             // if self.previous_steps.len() > 50 {
-    //             //     self.previous_steps.pop_back();
-    //             // }
-    //         }
-    //     }
-    //     // eprintln!("ST:{:?}", self.previous_steps);
-    // }
-
-    pub fn memorize_step(&mut self, step:Option<(Array<f64,Ix1>,f64)>) {
-            if !self.converged() {
-                if let Some((_,displacement)) = step {
-                    self.previous_steps.push_front(displacement);
-                    if self.previous_steps.len() > 50 {
-                        self.previous_steps.pop_back();
-                    }
-                }
-                else {
-                    self.previous_steps.push_front(0.);
-                    if self.previous_steps.len() > 50 {
-                        self.previous_steps.pop_back();
-                    }
+    pub fn memorize_step(&mut self,point_option: Option<Array<f64,Ix1>>,points:&Arc<Array<f64,Ix2>>) {
+        if !self.converged(points) {
+            // eprintln!("PO:{:?}", point_option);
+            if let Some(point) = point_option {
+                self.previous_steps.push_front(point);
+                if self.previous_steps.len() > 50 {
+                    self.previous_steps.pop_back();
                 }
             }
-            // eprintln!("ST:{:?}", self.previous_steps);
+            else {
+                // let current_point = self.point(points);
+                // self.previous_steps.push_front(current_point);
+                // if self.previous_steps.len() > 50 {
+                //     self.previous_steps.pop_back();
+                // }
+            }
+        }
+        // eprintln!("ST:{:?}", self.previous_steps);
     }
+    //
+    // pub fn memorize_step(&mut self, step:Option<(Array<f64,Ix1>,f64)>) {
+    //         if !self.converged() {
+    //             if let Some((_,displacement)) = step {
+    //                 self.previous_steps.push_front(displacement);
+    //                 if self.previous_steps.len() > 50 {
+    //                     self.previous_steps.pop_back();
+    //                 }
+    //             }
+    //             else {
+    //                 self.previous_steps.push_front(0.);
+    //                 if self.previous_steps.len() > 50 {
+    //                     self.previous_steps.pop_back();
+    //                 }
+    //             }
+    //         }
+    //         // eprintln!("ST:{:?}", self.previous_steps);
+    // }
 
     fn subsampled_nearest(&self,points:Arc<Array<f64,Ix2>>) -> Option<(Array<f64,Ix1>,f64)> {
 
@@ -157,26 +159,56 @@ impl Pathfinder {
             sub_points.push((first_subsample.to_owned(),self.distance.measure(center, first_subsample.view())));
         }
 
-        for sub_point_index in sample_subsamples {
 
-            let sub_point = points.row(sub_point_index);
-            let sub_point_distance = self.distance.measure(center,sub_point.view());
+        match self.distance {
+            Distance::Cosine => {
+                let p1ss = center.map(|x| x.powi(2)).scalar_sum().sqrt();
+                for sub_point_index in sample_subsamples {
+                    let p2ss = self.cached_distance_sums[sub_point_index];
+                    let sub_point = points.row(sub_point_index);
+                    let dot_product = center.dot(&sub_point);
+                    let sub_point_distance = 1.0 - (dot_product / (p1ss * p2ss));
 
-            let mut insert_index = None;
+                    let mut insert_index = None;
 
-            for (i,(previous_point,previous_distance)) in sub_points.iter().enumerate() {
-                if sub_point_distance < *previous_distance {
-                    insert_index = Some(i);
-                    break
+                    for (i,(previous_point,previous_distance)) in sub_points.iter().enumerate() {
+                        if sub_point_distance < *previous_distance {
+                            insert_index = Some(i);
+                            break
+                        }
+                    }
+
+                    if let Some(insert) = insert_index {
+                        sub_points.insert(insert,(sub_point.to_owned(),sub_point_distance));
+                    }
+
+                    sub_points.truncate(n+1);
+
                 }
             }
+            _ => {
+                for sub_point_index in sample_subsamples {
 
-            if let Some(insert) = insert_index {
-                sub_points.insert(insert,(sub_point.to_owned(),sub_point_distance));
+                    let sub_point = points.row(sub_point_index);
+                    let sub_point_distance = self.distance.measure(center,sub_point.view());
+
+                    let mut insert_index = None;
+
+                    for (i,(previous_point,previous_distance)) in sub_points.iter().enumerate() {
+                        if sub_point_distance < *previous_distance {
+                            insert_index = Some(i);
+                            break
+                        }
+                    }
+
+                    if let Some(insert) = insert_index {
+                        sub_points.insert(insert,(sub_point.to_owned(),sub_point_distance));
+                    }
+
+                    sub_points.truncate(n+1);
+
+                }
             }
-
-            sub_points.truncate(n+1);
-
         }
 
         sub_points
@@ -236,20 +268,29 @@ impl Pathfinder {
         let mut step_counter = 0;
         let mut distance = 0.;
 
+        if let Distance::Cosine = self.distance {
+            self.cached_distance_sums = points
+                                            .axis_iter(Axis(0))
+                                            .map(|x| {
+                                                x.map(|y| y.powi(2)).scalar_sum().sqrt()
+                                            }).collect()
+        }
+
         while let Some((step,distance)) = self.step_from(point.view(),points) {
             point = step;
-            // self.memorize_step(Some(point.clone()),points);
-            self.memorize_step(Some((point.clone(),distance)));
+            self.memorize_step(Some(point.clone()),points);
+            // self.memorize_step(Some((point.clone(),distance)));
             step_counter += 1;
-            if step_counter%10 == 0 {
-                // eprintln!("S:{:?}",step_counter);
-            }
+            // if step_counter%10 == 0 {
+            //     // eprintln!("S:{:?}",step_counter);
+            // }
         }
 
         // eprintln!("Steps:{:?}", self.previous_steps);
 
         self.previous_steps.clear();
         self.converged = false;
+        self.cached_distance_sums = vec![];
 
         (point,distance)
 
@@ -296,37 +337,21 @@ impl Pathfinder {
         final_points
     }
 
-    // fn converged(&mut self,points:&Arc<Array<f64,Ix2>>) -> bool {
-    //     if self.previous_steps.len() < 50 {
-    //         return false
-    //     }
-    //     if self.converged {
-    //         return true
-    //     }
-    //     let distant_point = self.previous_steps.back().unwrap().view();
-    //     let previous_point = self.previous_steps.front().unwrap().view();
-    //     let current_point = self.point(&points);
-    //     let short_displacement = self.distance.measure(previous_point,current_point.view());
-    //     let long_displacement = self.distance.measure(distant_point,current_point.view());
-    //     // eprintln!("SD:{:?}",short_displacement);
-    //     // eprintln!("LD:{:?}",long_displacement);
-    //     if long_displacement < (short_displacement * self.convergence) {
-    //         self.converged = true;
-    //         return true
-    //     }
-    //     else {
-    //         return false
-    //     }
-    // }
-
-    fn converged(&mut self) -> bool {
+    fn converged(&mut self,points:&Arc<Array<f64,Ix2>>) -> bool {
         if self.previous_steps.len() < 50 {
             return false
         }
         if self.converged {
             return true
         }
-        if self.previous_steps.iter().sum::<f64>() / 50. < self.previous_steps.iter().rev().take(10).sum::<f64>() / 10. {
+        let distant_point = self.previous_steps.back().unwrap().view();
+        let previous_point = self.previous_steps.front().unwrap().view();
+        let current_point = self.point(&points);
+        let short_displacement = self.distance.measure(previous_point,current_point.view());
+        let long_displacement = self.distance.measure(distant_point,current_point.view());
+        // eprintln!("SD:{:?}",short_displacement);
+        // eprintln!("LD:{:?}",long_displacement);
+        if long_displacement < (short_displacement * self.convergence) {
             self.converged = true;
             return true
         }
@@ -335,15 +360,31 @@ impl Pathfinder {
         }
     }
 
-    pub fn fuzz(&self) -> f64 {
-        self.previous_steps.iter().rev().take(10).sum::<f64>() / 10.
-    }
+    // fn converged(&mut self) -> bool {
+    //     if self.previous_steps.len() < 50 {
+    //         return false
+    //     }
+    //     if self.converged {
+    //         return true
+    //     }
+    //     if self.previous_steps.iter().sum::<f64>() / 50. < self.previous_steps.iter().rev().take(10).sum::<f64>() / 10. {
+    //         self.converged = true;
+    //         return true
+    //     }
+    //     else {
+    //         return false
+    //     }
+    // }
 
     // pub fn fuzz(&self) -> f64 {
-    //     let distant_point = self.previous_steps.back().unwrap().view();
-    //     let previous_point = self.previous_steps.front().unwrap().view();
-    //     self.distance.measure(distant_point,previous_point)
+    //     self.previous_steps.iter().rev().take(10).sum::<f64>() / 10.
     // }
+
+    pub fn fuzz(&self) -> f64 {
+        let distant_point = self.previous_steps.back().unwrap().view();
+        let previous_point = self.previous_steps.front().unwrap().view();
+        self.distance.measure(distant_point,previous_point)
+    }
 
     pub fn sub_fuzz(&self,fuzz: usize,points:Arc<Array<f64,Ix2>>) -> f64 {
         let mut acc = 0.;
