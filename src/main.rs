@@ -19,7 +19,7 @@ mod single_pathfinder;
 mod cluster;
 use io::{write_array,write_vector};
 use mobile_gravity_field::GravityField;
-use io::{Parameters,Command};
+use io::{Parameters,Command,Distance};
 use ndarray::{Array,Axis,Ix1,Ix2,Zip,ArrayView};
 use std::sync::Arc;
 use std::io::Error;
@@ -43,7 +43,7 @@ fn main() -> Result<(),Error> {
     }
 
     for _ in 0..*parameters_raw.borrow.as_ref().unwrap_or(&0)  {
-        gravity_points = borrow(gravity_points,parameters_raw.distance.as_ref().unwrap(),parameters_raw.verbose);
+        gravity_points = borrow(gravity_points,parameters_raw.distance.as_ref().unwrap_or(&Distance::Cosine),parameters_raw.verbose);
     }
 
     let mut parameters = Arc::new(parameters_raw);
