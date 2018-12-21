@@ -26,7 +26,7 @@ pub struct Pathfinder {
     convergence: f64,
     converged: bool,
     step_fraction: f64,
-    cached_distance_sums: Vec<f64>,
+    cached_distance_sums: Arc<Vec<f64>>,
 }
 
 impl Pathfinder {
@@ -68,7 +68,7 @@ impl Pathfinder {
             convergence: parameters.convergence_factor.unwrap_or(1.),
             converged: false,
             step_fraction: parameters.step_fraction.unwrap_or(0.3),
-            cached_distance_sums: vec![]
+            cached_distance_sums: Arc::new(vec![])
         }
 
     }
@@ -91,33 +91,19 @@ impl Pathfinder {
                 }
             }
             else {
-                // let current_point = self.point(points);
-                // self.previous_steps.push_front(current_point);
-                // if self.previous_steps.len() > 50 {
-                //     self.previous_steps.pop_back();
-                // }
+                let current_point = self.point(points);
+                self.previous_steps.push_front(current_point);
+                if self.previous_steps.len() > 50 {
+                    self.previous_steps.pop_back();
+                }
             }
         }
         // eprintln!("ST:{:?}", self.previous_steps);
     }
-    //
-    // pub fn memorize_step(&mut self, step:Option<(Array<f64,Ix1>,f64)>) {
-    //         if !self.converged() {
-    //             if let Some((_,displacement)) = step {
-    //                 self.previous_steps.push_front(displacement);
-    //                 if self.previous_steps.len() > 50 {
-    //                     self.previous_steps.pop_back();
-    //                 }
-    //             }
-    //             else {
-    //                 self.previous_steps.push_front(0.);
-    //                 if self.previous_steps.len() > 50 {
-    //                     self.previous_steps.pop_back();
-    //                 }
-    //             }
-    //         }
-    //         // eprintln!("ST:{:?}", self.previous_steps);
-    // }
+
+    pub fn set_cached_distance_sums(&mut self, cache: Arc<Vec<f64>>) {
+        self.cached_distance_sums = cache;
+    }
 
     fn subsampled_nearest(&self,points:Arc<Array<f64,Ix2>>) -> Option<(Array<f64,Ix1>,f64)> {
 
@@ -159,12 +145,17 @@ impl Pathfinder {
             sub_points.push((first_subsample.to_owned(),self.distance.measure(center, first_subsample.view())));
         }
 
-
         match self.distance {
             Distance::Cosine => {
-                let p1ss = center.map(|x| x.powi(2)).scalar_sum().sqrt();
+                let p1ss = center.map(|x| x.powi(2)).sum().sqrt();
                 for sub_point_index in sample_subsamples {
-                    let p2ss = self.cached_distance_sums[sub_point_index];
+                    let p2ss;
+                    if self.cached_distance_sums.len() > 0 {
+                        p2ss = self.cached_distance_sums[sub_point_index];
+                    }
+                    else {
+                        p2ss = points.row(sub_point_index).map(|y| y.powi(2)).sum().sqrt();
+                    }
                     let sub_point = points.row(sub_point_index);
                     let dot_product = center.dot(&sub_point);
                     let sub_point_distance = 1.0 - (dot_product / (p1ss * p2ss));
@@ -219,6 +210,9 @@ impl Pathfinder {
 
     pub fn step(&self,points:&Arc<Array<f64,Ix2>>) -> Option<(Array<f64,Ix1>,f64)> {
 
+        // eprintln!("Pathfinder data: {:?},{:?}", points.rows(),points.cols());
+        // eprintln!("Stepping from {:?}", self.point_view(&points));
+
         self.step_from(self.point_view(&points),points)
 
     }
@@ -229,6 +223,7 @@ impl Pathfinder {
             return None
         }
 
+        // eprintln!("Convergence test passed");
         // eprintln!("STEP");
         // eprintln!("P:{:?}",point);
 
@@ -243,6 +238,7 @@ impl Pathfinder {
             bag_counter += 1;
         };
 
+        // eprintln!("Subsampling successful");
 
         if bag_counter > 0 {
 
@@ -269,11 +265,11 @@ impl Pathfinder {
         let mut distance = 0.;
 
         if let Distance::Cosine = self.distance {
-            self.cached_distance_sums = points
+            self.cached_distance_sums = Arc::new(points
                                             .axis_iter(Axis(0))
                                             .map(|x| {
-                                                x.map(|y| y.powi(2)).scalar_sum().sqrt()
-                                            }).collect()
+                                                x.map(|y| y.powi(2)).sum().sqrt()
+                                            }).collect())
         }
 
         while let Some((step,distance)) = self.step_from(point.view(),points) {
@@ -290,7 +286,7 @@ impl Pathfinder {
 
         self.previous_steps.clear();
         self.converged = false;
-        self.cached_distance_sums = vec![];
+        self.cached_distance_sums = Arc::new(vec![]);
 
         (point,distance)
 
@@ -317,6 +313,8 @@ impl Pathfinder {
         // eprintln!("Deviation:{:?}",av_deviation);
 
         let displacement = length((&self.point(&points) - &average_point).view());
+
+        // let displacement = self.distance.measure(self.point_view(&points),average_point.view());
 
         // eprintln!("Displacement:{:?}",displacement);
 

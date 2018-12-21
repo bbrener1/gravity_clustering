@@ -18,7 +18,7 @@ pub struct Cluster {
     pub radius: f64,
     pub center: Array<f64,Ix1>,
     pub members: Vec<usize>,
-    array: Arc<Array<f64,Ix2>>,
+    pub array: Arc<Array<f64,Ix2>>,
     distance: Distance
 }
 

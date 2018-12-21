@@ -20,7 +20,7 @@ pub struct GravityField {
     features: usize,
     pub initial_positions: Array<f64,Ix2>,
     pub current_positions: Option<Arc<Array<f64,Ix2>>>,
-    fuzz: Array<f64,Ix1>,
+    pub fuzz: Array<f64,Ix1>,
     pub clusters: Vec<Cluster>,
     parameters: Arc<Parameters>,
     distance: Distance,
@@ -51,8 +51,56 @@ impl GravityField {
     }
 
 
-
     pub fn fuzzy_fit_mobile(&mut self) -> Array<f64,Ix2> {
+
+        let fuzz = self.parameters.fuzz.clone().unwrap_or(5);
+
+        let initial_positions = Arc::new(self.initial_positions.clone());
+        let mut final_position_matrix: Array<f64,Ix3> = Array::zeros((fuzz,self.samples,self.features));
+
+        for mut fuzzy_axis in final_position_matrix.axis_iter_mut(Axis(0)) {
+            self.fuzzy_fit_mobile_single();
+            let predictions = self.fuzzy_predict();
+            let mut cluster_positions = vec![];
+            for mut cluster in self.clusters.iter_mut() {
+                cluster.array = initial_positions.clone();
+                cluster_positions.push(cluster.center());
+            }
+            for (i,prediction) in predictions.iter().enumerate()  {
+                fuzzy_axis.row_mut(i).assign(&cluster_positions[*prediction]);
+            }
+            // eprintln!("{:?}",fuzzy_axis);
+            self.current_positions = Some(Arc::new(self.initial_positions.clone()));
+            self.clusters.clear();
+        }
+
+        // self.distance = Distance::Euclidean;
+
+        let final_positions = final_position_matrix.mean_axis(Axis(0));
+
+        let mut lengths = Array::zeros(fuzz);
+        for i in 0..self.samples {
+            lengths.fill(0.);
+            for j in 0..fuzz {
+                lengths[j] = self.distance.measure(final_position_matrix.slice(s![j,i,..]),final_positions.slice(s![i,..]));
+                // lengths[j] = length((&final_position_matrix.slice(s![j,i,..]) - &final_positions.slice(s![i,..])).view());
+            }
+            self.fuzz[i] = lengths.sum() / fuzz as f64;
+        }
+
+        self.current_positions = Some(Arc::new(final_positions.clone()));
+
+        // eprintln!("{:?}", final_positions);
+        // eprintln!("{:?}", self.fuzz);
+
+        // self.distance = self.parameters.distance.unwrap_or(Distance::Cosine);
+
+        return final_positions
+
+    }
+
+
+    pub fn fuzzy_fit_mobile_single(&mut self) -> Array<f64,Ix2> {
 
         let mut pathfinders: Vec<Pathfinder> = (0..self.samples).map(|i| Pathfinder::init(i,self.samples,self.features,self.parameters.clone())).collect();
 
@@ -64,9 +112,20 @@ impl GravityField {
 
             moving_points = pathfinders.len();
 
-            eprintln!("Starting");
+            // eprintln!("Starting");
 
             let mut current_positions = self.current_positions.take().unwrap();
+
+            let cached_distance_sums: Arc<Vec<f64>> = Arc::new(current_positions
+                                            .axis_iter(Axis(0))
+                                            .map(|x| {
+                                                x.map(|y| y.powi(2)).sum().sqrt()
+                                            }).collect());
+
+            for pathfinder in pathfinders.iter_mut() {
+                pathfinder.set_cached_distance_sums(cached_distance_sums.clone());
+            }
+
 
             let stepped_positions: Vec<Option<(Array<f64,Ix1>,f64)>> =
                 pathfinders
@@ -77,7 +136,7 @@ impl GravityField {
                 })
                 .collect();
 
-            eprintln!("Stepped");
+            // eprintln!("Stepped");
 
             for (i,(mut position,new_position_option)) in
                 Arc::get_mut(&mut current_positions)
@@ -94,7 +153,7 @@ impl GravityField {
             }
 
             for pathfinder in pathfinders.iter_mut() {
-                pathfinder.memorize_step(None,&current_positions.clone());
+                pathfinder.memorize_step(None,&current_positions);
             }
 
             // for (pathfinder,step) in pathfinders.iter_mut().zip(stepped_positions) {
@@ -103,11 +162,11 @@ impl GravityField {
 
             self.current_positions = Some(current_positions.clone());
 
-            eprintln!("Finished: {}", moving_points);
+            eprintln!("Stepping: {},{}", step_counter, moving_points);
 
             step_counter += 1;
 
-            if step_counter > 2000 {
+            if step_counter > self.parameters.steps.unwrap_or(500) {
                 break
             }
 
@@ -194,12 +253,20 @@ impl GravityField {
 
         self.cluster_points();
 
-        // self.merge_clusters();
+        self.merge_clusters();
+
+        for (i,mut cluster) in self.clusters.iter_mut().enumerate() {
+            cluster.id = i;
+        }
 
         for cluster in &self.clusters {
             for point in &cluster.members {
                 predictions[*point] = cluster.id;
             }
+        }
+
+        for cluster in &self.clusters {
+            eprintln!("C:{:?},{:?}",cluster.id,cluster.members.len())
         }
 
         predictions
@@ -233,11 +300,16 @@ impl GravityField {
 
                     let displacement = self.distance.measure(self.initial_positions.row(point_index),point);
 
+                    // let displacement = length((&self.initial_positions.row(point_index) - &point).view());
+
                     let mut distances_to_clusters = vec![];
 
                     for (i,cluster) in self.clusters.iter().enumerate() {
 
                         distances_to_clusters.push((i,self.distance.measure(point, cluster.center.view())));
+
+                        // distances_to_clusters.push((i,length((&point - &cluster.center).view())));
+
                         // if self.parameters.distance.unwrap_or(Distance::Cosine).measure(point,cluster.center.view()) < (cluster.radius + self.fuzz[point_index]) {
                         // // if distance(point,cluster.center.view()) < self.parameters.scaling_factor.unwrap_or(0.1) * self.parameters.convergence_factor.unwrap_or(5.){
                         //     cluster.merge_point(point,point_index);

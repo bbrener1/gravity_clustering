@@ -94,6 +94,8 @@ fn main() -> Result<(),Error> {
             let mut final_positions = field.fuzzy_fit_single();
             let mut predictions = field.fuzzy_predict();
 
+            let initial_fuzz = field.fuzz;
+
             if parameters.refining {
 
                 let mut refining_parameters = Arc::make_mut(&mut parameters).clone();
@@ -103,6 +105,9 @@ fn main() -> Result<(),Error> {
                 let mut refining_field = GravityField::init(final_positions,Arc::new(refining_parameters));
 
                 final_positions = refining_field.fuzzy_fit_single();
+
+                refining_field.fuzz = initial_fuzz;
+
                 predictions = refining_field.fuzzy_predict();
 
                 field = refining_field;
@@ -146,9 +151,9 @@ pub fn distance(pa1:ArrayView<f64,Ix1>,pa2:ArrayView<f64,Ix1>) -> f64 {
 }
 
 pub fn cos_similarity(pa1:ArrayView<f64,Ix1>,pa2:ArrayView<f64,Ix1>) -> f64 {
-    let product_sum = (&pa1 * &pa2).scalar_sum();
-    let p1ss = pa1.map(|x| x.powi(2)).scalar_sum().sqrt();
-    let p2ss = pa2.map(|x| x.powi(2)).scalar_sum().sqrt();
+    let product_sum = (&pa1 * &pa2).sum();
+    let p1ss = pa1.map(|x| x.powi(2)).sum().sqrt();
+    let p2ss = pa2.map(|x| x.powi(2)).sum().sqrt();
     product_sum / (p1ss * p2ss)
 }
 

@@ -39,6 +39,7 @@ pub struct Parameters {
     pub standardize: bool,
     pub fuzz: Option<usize>,
     pub step_fraction: Option<f64>,
+    pub steps: Option<usize>,
 
     count_array_file: String,
     feature_header_file: Option<String>,
@@ -68,6 +69,7 @@ impl Parameters {
             standardize: false,
             fuzz: None,
             step_fraction: None,
+            steps: None,
 
             processor_limit: None,
 
@@ -160,10 +162,13 @@ impl Parameters {
                     arg_struct.smoothing = Some(args.next().map(|x| x.parse::<usize>()).expect("Smoothing parse error. Not a number?").expect("Iteration error"));
                 },
                 "-fuzz" => {
-                    arg_struct.smoothing = Some(args.next().map(|x| x.parse::<usize>()).expect("Fuzz parse error. Not a number?").expect("Iteration error"));
+                    arg_struct.fuzz = Some(args.next().map(|x| x.parse::<usize>()).expect("Fuzz parse error. Not a number?").expect("Iteration error"));
                 },
                 "-step_fraction" => {
                     arg_struct.step_fraction = Some(args.next().map(|x| x.parse::<f64>()).expect("Step fraction parse error. Not a number?").expect("Iteration error"))
+                }
+                "-steps" => {
+                    arg_struct.steps = Some(args.next().map(|x| x.parse::<usize>()).expect("Steps not parsed, not a number?").expect("Iteration error"))
                 }
                 "-borrow" => {
                     arg_struct.borrow = Some(args.next().map(|x| x.parse::<usize>()).expect("Borrowing parse error. Not a number?").expect("Iteration error"));
@@ -716,15 +721,15 @@ impl Distance {
     pub fn measure(&self,p1:ArrayView<f64,Ix1>,p2:ArrayView<f64,Ix1>) -> f64 {
         match self {
             Distance::Manhattan => {
-                (&p1 - &p2).scalar_sum()
+                (&p1 - &p2).sum()
             },
             Distance::Euclidean => {
-                (&p1 - &p2).map(|x| x.powi(2)).scalar_sum().sqrt()
+                (&p1 - &p2).map(|x| x.powi(2)).sum().sqrt()
             },
             Distance::Cosine => {
                 let dot_product = p1.dot(&p2);
-                let p1ss = p1.map(|x| x.powi(2)).scalar_sum().sqrt();
-                let p2ss = p2.map(|x| x.powi(2)).scalar_sum().sqrt();
+                let p1ss = p1.map(|x| x.powi(2)).sum().sqrt();
+                let p2ss = p2.map(|x| x.powi(2)).sum().sqrt();
                 1.0 - (dot_product / (p1ss * p2ss))
             }
             Distance::Correlation => {

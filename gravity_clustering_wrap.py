@@ -18,7 +18,7 @@ def main():
     counts = np.loadtxt(sys.argv[1])
     fit_predict(counts,scaling=.1,sample_sub=10)
 
-def fit_predict(targets,command,feature_sub=None,distance=None,verbose=False,sample_sub=None,scaling=None,refining=False,fuzz=None,step_fraction=None,borrow=None,error_dump=None,convergence_factor=None,smoothing=None,locality=None):
+def fit_predict(targets,command,feature_sub=None,distance=None,verbose=False,sample_sub=None,scaling=None,refining=False,fuzz=None,step_fraction=None,steps=None,borrow=None,error_dump=None,convergence_factor=None,smoothing=None,locality=None):
 
     # np.array(targets)
     targets = targets.astype(dtype=float)
@@ -64,6 +64,8 @@ def fit_predict(targets,command,feature_sub=None,distance=None,verbose=False,sam
         arg_list.extend(["-convergence",str(convergence_factor)])
     if step_fraction is not None:
         arg_list.extend(["-step_fraction",str(step_fraction)])
+    if steps is not None:
+        arg_list.extend(["-steps",str(steps)])
     if locality is not None:
         arg_list.extend(["-l",str(locality)])
     if smoothing is not None:
